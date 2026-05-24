@@ -204,63 +204,61 @@ class DksInstallerApp:
 
         action_frame = ttk.LabelFrame(self.root, text="Actions")
         action_frame.grid(row=2, column=0, padx=10, pady=6, sticky="ew")
+        action_frame.grid_columnconfigure(0, weight=1)
+
+        top_actions_row = ttk.Frame(action_frame)
+        top_actions_row.grid(row=0, column=0, padx=6, pady=(8, 4), sticky="ew")
+        for col in range(3):
+            top_actions_row.grid_columnconfigure(col, weight=1, uniform="top_actions")
 
         ttk.Button(
-            action_frame,
+            top_actions_row,
             text="Validate ZIP Package",
             command=self._validate_package,
             style="SecondaryAction.TButton",
-        ).grid(
-            row=0,
-            column=0,
-            padx=6,
-            pady=(8, 4),
-            sticky="ew",
-        )
+            width=25,
+        ).grid(row=0, column=0, padx=6, sticky="")
         ttk.Button(
-            action_frame,
-            text="Install Only (Overwrite DKS Files)",
+            top_actions_row,
+            text="Install Only\n(Overwrite DKS Files)",
             command=lambda: self._run_install("install_only"),
             style="PrimaryAction.TButton",
-        ).grid(
-            row=0,
-            column=1,
-            padx=6,
-            pady=(8, 4),
-            sticky="ew",
-        )
+            width=25,
+        ).grid(row=0, column=1, padx=6, sticky="")
         ttk.Button(
-            action_frame,
-            text="Backup Current and Install",
+            top_actions_row,
+            text="Backup Current and\nInstall",
             command=lambda: self._run_install("backup_install"),
             style="PrimaryAction.TButton",
-        ).grid(row=0, column=2, columnspan=2, padx=6, pady=(8, 4), sticky="ew")
+            width=25,
+        ).grid(row=0, column=2, padx=6, sticky="")
 
-        ttk.Button(action_frame, text="Open Logs Folder", command=self._open_logs_folder).grid(
-            row=1,
+        bottom_actions_row = ttk.Frame(action_frame)
+        bottom_actions_row.grid(row=1, column=0, padx=6, pady=(4, 8), sticky="ew")
+        for col in range(4):
+            bottom_actions_row.grid_columnconfigure(col, weight=1)
+
+        ttk.Button(bottom_actions_row, text="Open Logs Folder", command=self._open_logs_folder).grid(
+            row=0,
             column=0,
             padx=6,
-            pady=(4, 8),
             sticky="ew",
         )
         ttk.Button(
-            action_frame,
+            bottom_actions_row,
             text="Open Backup Folder",
             command=self._open_backup_folder,
-        ).grid(row=1, column=1, padx=6, pady=(4, 8), sticky="ew")
+        ).grid(row=0, column=1, padx=6, sticky="ew")
         ttk.Button(
-            action_frame,
+            bottom_actions_row,
             text="Open DCS Saved Games Folders",
             command=self._open_dcs_saved_games_folders,
-        ).grid(row=1, column=2, padx=6, pady=(4, 8), sticky="ew")
+        ).grid(row=0, column=2, padx=6, sticky="ew")
         ttk.Button(
-            action_frame,
+            bottom_actions_row,
             text="Clear Custom Kneeboard Folder",
             command=self._clear_custom_kneeboard_folder,
-        ).grid(row=1, column=3, padx=6, pady=(4, 8), sticky="ew")
-
-        for col in range(4):
-            action_frame.grid_columnconfigure(col, weight=1)
+        ).grid(row=0, column=3, padx=6, sticky="ew")
 
         advanced_wrap = ttk.LabelFrame(self.root, text="Advanced")
         advanced_wrap.grid(row=3, column=0, padx=10, pady=6, sticky="ew")
@@ -403,6 +401,7 @@ class DksInstallerApp:
             background=primary_button_bg,
             foreground="white",
             borderwidth=0,
+            anchor="center",
             relief="flat",
         )
         style.map(
@@ -420,6 +419,7 @@ class DksInstallerApp:
             background="#E2E8F0",
             foreground=text_color,
             borderwidth=0,
+            anchor="center",
             relief="flat",
         )
         style.map(

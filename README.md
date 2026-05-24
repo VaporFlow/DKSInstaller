@@ -2,7 +2,7 @@
 
 Windows desktop installer for DKS flight-plan ZIP packages.
 
-Current version: `v0.8.0`
+Current version: `v0.8.1`
 
 ## Current project layout
 

@@ -2,6 +2,12 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.8.1] - 2026-05-24
+
+### Changed
+- Centered the top-row action buttons and their labels.
+- Made top-row action buttons equal-width (`width=25`) with multiline labels for better readability and consistent alignment.
+
 ## [0.8.0] - 2026-05-24
 
 ### Added
