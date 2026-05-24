@@ -2,6 +2,15 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.8.0] - 2026-05-24
+
+### Added
+- Actions panel now uses a two-row layout: top row for install actions, bottom row for utility actions.
+
+### Changed
+- Styled **Install Only (Overwrite DKS Files)** and **Backup Current and Install** as dark-blue primary buttons with white text.
+- Refreshed overall UI styling (modernized theme, cleaner panel/list visuals, improved button hierarchy).
+
 ## [0.7.1] - 2026-05-24
 
 ### Fixed

@@ -24,6 +24,7 @@ class DksInstallerApp:
         self.root.geometry("1100x760")
         self.root.minsize(980, 680)
         self._set_window_icon()
+        self._configure_styles()
 
         self.config = load_config()
         self.package_cache: dict[str, PackageInfo] = {}
@@ -89,10 +90,34 @@ class DksInstallerApp:
 
         self.downloads_list = tk.Listbox(source_frame, height=6, exportselection=False)
         self.downloads_list.grid(row=1, column=0, padx=6, pady=4, sticky="nsew")
+        self.downloads_list.configure(
+            bg="#FFFFFF",
+            fg="#1F2937",
+            relief="flat",
+            borderwidth=0,
+            highlightthickness=1,
+            highlightbackground="#D5DCE8",
+            highlightcolor="#1D4ED8",
+            selectbackground="#DCEAFE",
+            selectforeground="#0F172A",
+            activestyle="none",
+        )
         self.downloads_list.bind("<<ListboxSelect>>", self._on_download_selected)
 
         self.backups_list = tk.Listbox(source_frame, height=6, exportselection=False)
         self.backups_list.grid(row=1, column=1, padx=6, pady=4, sticky="nsew")
+        self.backups_list.configure(
+            bg="#FFFFFF",
+            fg="#1F2937",
+            relief="flat",
+            borderwidth=0,
+            highlightthickness=1,
+            highlightbackground="#D5DCE8",
+            highlightcolor="#1D4ED8",
+            selectbackground="#DCEAFE",
+            selectforeground="#0F172A",
+            activestyle="none",
+        )
         self.backups_list.bind("<<ListboxSelect>>", self._on_backup_selected)
 
         entry_frame = ttk.Frame(source_frame)
@@ -180,41 +205,61 @@ class DksInstallerApp:
         action_frame = ttk.LabelFrame(self.root, text="Actions")
         action_frame.grid(row=2, column=0, padx=10, pady=6, sticky="ew")
 
-        ttk.Button(action_frame, text="Validate ZIP Package", command=self._validate_package).grid(
-            row=0, column=0, padx=6, pady=8, sticky="ew"
+        ttk.Button(
+            action_frame,
+            text="Validate ZIP Package",
+            command=self._validate_package,
+            style="SecondaryAction.TButton",
+        ).grid(
+            row=0,
+            column=0,
+            padx=6,
+            pady=(8, 4),
+            sticky="ew",
         )
         ttk.Button(
             action_frame,
             text="Install Only (Overwrite DKS Files)",
             command=lambda: self._run_install("install_only"),
+            style="PrimaryAction.TButton",
         ).grid(
-            row=0, column=1, padx=6, pady=8, sticky="ew"
+            row=0,
+            column=1,
+            padx=6,
+            pady=(8, 4),
+            sticky="ew",
         )
         ttk.Button(
             action_frame,
-            text="Backup Current + Install",
+            text="Backup Current and Install",
             command=lambda: self._run_install("backup_install"),
-        ).grid(row=0, column=2, padx=6, pady=8, sticky="ew")
+            style="PrimaryAction.TButton",
+        ).grid(row=0, column=2, columnspan=2, padx=6, pady=(8, 4), sticky="ew")
+
         ttk.Button(action_frame, text="Open Logs Folder", command=self._open_logs_folder).grid(
-            row=0, column=3, padx=6, pady=8, sticky="ew"
+            row=1,
+            column=0,
+            padx=6,
+            pady=(4, 8),
+            sticky="ew",
         )
         ttk.Button(
             action_frame,
             text="Open Backup Folder",
             command=self._open_backup_folder,
-        ).grid(row=0, column=4, padx=6, pady=8, sticky="ew")
+        ).grid(row=1, column=1, padx=6, pady=(4, 8), sticky="ew")
         ttk.Button(
             action_frame,
             text="Open DCS Saved Games Folders",
             command=self._open_dcs_saved_games_folders,
-        ).grid(row=0, column=5, padx=6, pady=8, sticky="ew")
+        ).grid(row=1, column=2, padx=6, pady=(4, 8), sticky="ew")
         ttk.Button(
             action_frame,
             text="Clear Custom Kneeboard Folder",
             command=self._clear_custom_kneeboard_folder,
-        ).grid(row=0, column=6, padx=6, pady=8, sticky="ew")
+        ).grid(row=1, column=3, padx=6, pady=(4, 8), sticky="ew")
 
-        for col in range(7):
+        for col in range(4):
             action_frame.grid_columnconfigure(col, weight=1)
 
         advanced_wrap = ttk.LabelFrame(self.root, text="Advanced")
@@ -323,6 +368,73 @@ class DksInstallerApp:
         # can grab focus asynchronously after process start.
         for delay_ms in (0, 140, 420, 900):
             self.root.after(delay_ms, apply_focus)
+
+    def _configure_styles(self) -> None:
+        base_bg = "#EEF3FB"
+        panel_bg = "#FFFFFF"
+        text_color = "#111827"
+        primary_button_bg = "#0B3A86"
+        primary_button_active = "#0A3170"
+
+        self.root.configure(bg=base_bg)
+
+        style = ttk.Style(self.root)
+        try:
+            style.theme_use("clam")
+        except tk.TclError:
+            pass
+
+        style.configure(".", font=("Segoe UI", 9))
+        style.configure("TFrame", background=base_bg)
+        style.configure("TLabelframe", background=panel_bg, borderwidth=1, relief="solid")
+        style.configure(
+            "TLabelframe.Label",
+            background=panel_bg,
+            foreground=text_color,
+            font=("Segoe UI", 9, "bold"),
+        )
+        style.configure("TLabel", background=panel_bg, foreground=text_color)
+        style.configure("TCheckbutton", background=panel_bg, foreground=text_color)
+        style.map("TCheckbutton", background=[("active", panel_bg)])
+        style.configure("TButton", padding=(10, 6), font=("Segoe UI", 9, "bold"))
+
+        style.configure(
+            "PrimaryAction.TButton",
+            background=primary_button_bg,
+            foreground="white",
+            borderwidth=0,
+            relief="flat",
+        )
+        style.map(
+            "PrimaryAction.TButton",
+            background=[
+                ("pressed", primary_button_active),
+                ("active", primary_button_active),
+                ("disabled", "#93A4C4"),
+            ],
+            foreground=[("disabled", "#F3F4F6")],
+        )
+
+        style.configure(
+            "SecondaryAction.TButton",
+            background="#E2E8F0",
+            foreground=text_color,
+            borderwidth=0,
+            relief="flat",
+        )
+        style.map(
+            "SecondaryAction.TButton",
+            background=[("pressed", "#CBD5E1"), ("active", "#CBD5E1")],
+        )
+
+        style.configure(
+            "Horizontal.TProgressbar",
+            troughcolor="#E5EAF4",
+            background="#1D4ED8",
+            bordercolor="#E5EAF4",
+            lightcolor="#1D4ED8",
+            darkcolor="#1D4ED8",
+        )
 
     def _add_path_row(
         self,
