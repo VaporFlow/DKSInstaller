@@ -2,6 +2,11 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.7.1] - 2026-05-24
+
+### Fixed
+- After installation (including DTC auto-launch), DKSInstaller now reclaims window focus so the app remains foreground instead of leaving focus on DTC.
+
 ## [0.7.0] - 2026-05-24
 
 ### Added

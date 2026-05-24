@@ -306,6 +306,24 @@ class DksInstallerApp:
             except (tk.TclError, OSError):
                 continue
 
+    def _focus_installer_window(self) -> None:
+        def apply_focus() -> None:
+            try:
+                if not self.root.winfo_exists():
+                    return
+                self.root.deiconify()
+                self.root.lift()
+                self.root.focus_force()
+                self.root.attributes("-topmost", True)
+                self.root.after(25, lambda: self.root.attributes("-topmost", False))
+            except tk.TclError:
+                return
+
+        # Run several focus pulses since external app launches (e.g. DTC)
+        # can grab focus asynchronously after process start.
+        for delay_ms in (0, 140, 420, 900):
+            self.root.after(delay_ms, apply_focus)
+
     def _add_path_row(
         self,
         parent: ttk.LabelFrame,
@@ -769,12 +787,15 @@ class DksInstallerApp:
             progress=self._set_progress,
         )
 
+        self._focus_installer_window()
+
         if getattr(result, "dtc_manual_close_required", False):
             messagebox.showwarning(
                 "Close DTC.exe",
                 "The installer could not stop DTC.exe automatically.\n\n"
                 "Please close DTC.exe manually before continuing.",
             )
+            self._focus_installer_window()
 
         summary_lines = self._format_result_lines(result)
 
@@ -782,6 +803,8 @@ class DksInstallerApp:
             messagebox.showinfo("Install", "\n".join(summary_lines))
         else:
             messagebox.showerror("Install", "\n".join(summary_lines))
+
+        self._focus_installer_window()
 
         self._refresh_sources()
 
