@@ -2,6 +2,11 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.6.2] - 2026-05-24
+
+### Fixed
+- DTC auto-launch now uses legacy-compatible Windows `--load` argument format (for example `F16C\\Design_OB.json`) instead of forward-slash paths, avoiding DTC key lookup crashes.
+
 ## [0.6.1] - 2026-05-24
 
 ### Added

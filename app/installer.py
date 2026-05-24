@@ -7,7 +7,7 @@ import subprocess
 import time
 import zipfile
 from datetime import datetime, timezone
-from pathlib import Path, PurePosixPath
+from pathlib import Path, PurePosixPath, PureWindowsPath
 from tempfile import TemporaryDirectory
 from typing import Callable
 
@@ -431,12 +431,10 @@ def _maybe_launch_dtc_app(
             )
             return
 
-    presets_root = options.documents_path / "DCS-DTC" / "Presets"
-    try:
-        relative_preset = plan.dtc_preset_target.relative_to(presets_root)
-        load_arg = str(relative_preset).replace("\\", "/")
-    except ValueError:
-        load_arg = str(plan.dtc_preset_target)
+    load_arg = str(
+        PureWindowsPath(package_info.manifest.aircraft.dtc_folder)
+        / plan.dtc_preset_target.name
+    )
 
     try:
         subprocess.Popen(  # noqa: S603
