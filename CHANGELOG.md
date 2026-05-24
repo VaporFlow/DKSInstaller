@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.8.2] - 2026-05-24
+
+### Changed
+- Updated Actions button styling: stronger 3D hover/pressed feedback for primary blue buttons and utility gray buttons.
+- Top-row **Validate ZIP Package** now matches utility-button look and uses multiline text so its height aligns with the other top-row buttons.
+- Increased button spacing in Actions rows (20px separation via horizontal padding).
+
 ## [0.8.1] - 2026-05-24
 
 ### Changed

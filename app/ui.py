@@ -213,52 +213,60 @@ class DksInstallerApp:
 
         ttk.Button(
             top_actions_row,
-            text="Validate ZIP Package",
+            text="Validate ZIP\nPackage",
             command=self._validate_package,
-            style="SecondaryAction.TButton",
+            style="UtilityAction.TButton",
             width=25,
-        ).grid(row=0, column=0, padx=6, sticky="")
+        ).grid(row=0, column=0, padx=10, sticky="")
         ttk.Button(
             top_actions_row,
             text="Install Only\n(Overwrite DKS Files)",
             command=lambda: self._run_install("install_only"),
             style="PrimaryAction.TButton",
             width=25,
-        ).grid(row=0, column=1, padx=6, sticky="")
+        ).grid(row=0, column=1, padx=10, sticky="")
         ttk.Button(
             top_actions_row,
             text="Backup Current and\nInstall",
             command=lambda: self._run_install("backup_install"),
             style="PrimaryAction.TButton",
             width=25,
-        ).grid(row=0, column=2, padx=6, sticky="")
+        ).grid(row=0, column=2, padx=10, sticky="")
 
         bottom_actions_row = ttk.Frame(action_frame)
         bottom_actions_row.grid(row=1, column=0, padx=6, pady=(4, 8), sticky="ew")
         for col in range(4):
             bottom_actions_row.grid_columnconfigure(col, weight=1)
 
-        ttk.Button(bottom_actions_row, text="Open Logs Folder", command=self._open_logs_folder).grid(
+        ttk.Button(
+            bottom_actions_row,
+            text="Open Logs Folder",
+            command=self._open_logs_folder,
+            style="UtilityAction.TButton",
+        ).grid(
             row=0,
             column=0,
-            padx=6,
+            padx=10,
             sticky="ew",
         )
         ttk.Button(
             bottom_actions_row,
             text="Open Backup Folder",
             command=self._open_backup_folder,
-        ).grid(row=0, column=1, padx=6, sticky="ew")
+            style="UtilityAction.TButton",
+        ).grid(row=0, column=1, padx=10, sticky="ew")
         ttk.Button(
             bottom_actions_row,
             text="Open DCS Saved Games Folders",
             command=self._open_dcs_saved_games_folders,
-        ).grid(row=0, column=2, padx=6, sticky="ew")
+            style="UtilityAction.TButton",
+        ).grid(row=0, column=2, padx=10, sticky="ew")
         ttk.Button(
             bottom_actions_row,
             text="Clear Custom Kneeboard Folder",
             command=self._clear_custom_kneeboard_folder,
-        ).grid(row=0, column=3, padx=6, sticky="ew")
+            style="UtilityAction.TButton",
+        ).grid(row=0, column=3, padx=10, sticky="ew")
 
         advanced_wrap = ttk.LabelFrame(self.root, text="Advanced")
         advanced_wrap.grid(row=3, column=0, padx=10, pady=6, sticky="ew")
@@ -400,31 +408,39 @@ class DksInstallerApp:
             "PrimaryAction.TButton",
             background=primary_button_bg,
             foreground="white",
-            borderwidth=0,
+            borderwidth=2,
             anchor="center",
-            relief="flat",
+            relief="raised",
+            lightcolor="#4F7CC7",
+            darkcolor="#07295F",
+            bordercolor="#082B63",
         )
         style.map(
             "PrimaryAction.TButton",
             background=[
-                ("pressed", primary_button_active),
-                ("active", primary_button_active),
+                ("pressed", "#082B63"),
+                ("active", "#1A4C9D"),
                 ("disabled", "#93A4C4"),
             ],
             foreground=[("disabled", "#F3F4F6")],
+            relief=[("pressed", "sunken"), ("active", "raised")],
         )
 
         style.configure(
-            "SecondaryAction.TButton",
-            background="#E2E8F0",
+            "UtilityAction.TButton",
+            background="#D3D6DC",
             foreground=text_color,
-            borderwidth=0,
+            borderwidth=2,
             anchor="center",
-            relief="flat",
+            relief="raised",
+            lightcolor="#F5F6F8",
+            darkcolor="#8B919A",
+            bordercolor="#A8AFB8",
         )
         style.map(
-            "SecondaryAction.TButton",
-            background=[("pressed", "#CBD5E1"), ("active", "#CBD5E1")],
+            "UtilityAction.TButton",
+            background=[("pressed", "#BCC1C9"), ("active", "#E4E7EC")],
+            relief=[("pressed", "sunken"), ("active", "raised")],
         )
 
         style.configure(
