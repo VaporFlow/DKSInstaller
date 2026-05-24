@@ -66,6 +66,7 @@ class PackageInfo:
 @dataclass
 class InstallPlan:
     kneeboard_dir: Path | None
+    custom_kneeboard_dir: Path | None
     dtc_preset_target: Path | None
     in_game_dtc_target: Path | None
     loadout_dir: Path | None
@@ -79,6 +80,7 @@ class InstallOptions:
     documents_path: Path
     dcs_install_path: Path | None
     dtc_app_path: Path | None
+    custom_kneeboard_path: Path | None
     kill_dtc_before_launch: bool
     backup_dir: Path
     show_restore_preview: bool
@@ -106,6 +108,7 @@ class AppConfig:
     documents_path: str = ""
     dcs_install_path: str = ""
     dtc_app_path: str = ""
+    custom_kneeboard_path: str = ""
     kill_dtc_before_launch: bool = True
     last_source_zip: str = ""
     last_source_type: str = "download"
@@ -122,6 +125,7 @@ class AppConfig:
             "documents_path": self.documents_path,
             "dcs_install_path": self.dcs_install_path,
             "dtc_app_path": self.dtc_app_path,
+            "custom_kneeboard_path": self.custom_kneeboard_path,
             "kill_dtc_before_launch": self.kill_dtc_before_launch,
             "last_source_zip": self.last_source_zip,
             "last_source_type": self.last_source_type,
@@ -140,6 +144,7 @@ class AppConfig:
             documents_path=str(data.get("documents_path", "")),
             dcs_install_path=str(data.get("dcs_install_path", "")),
             dtc_app_path=str(data.get("dtc_app_path", "")),
+            custom_kneeboard_path=str(data.get("custom_kneeboard_path", "")),
             kill_dtc_before_launch=bool(data.get("kill_dtc_before_launch", True)),
             last_source_zip=str(data.get("last_source_zip", "")),
             last_source_type=str(data.get("last_source_type", "download")),

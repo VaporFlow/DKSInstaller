@@ -32,6 +32,8 @@ AGGRESSIVE_DTC_PRESET_FOLDERS = (
     "F-15ESE",
 )
 
+CUSTOM_KNEEBOARD_TRACKER_FILE = ".dks-custom-kneeboard.json"
+
 
 def _entry_to_path(root: Path, zip_entry: str) -> Path:
     parts = [part for part in zip_entry.split("/") if part]
@@ -81,6 +83,7 @@ def _build_install_plan(package_info: PackageInfo, options: InstallOptions) -> I
     if package_info.kind != "standard" or package_info.manifest is None:
         return InstallPlan(
             kneeboard_dir=None,
+            custom_kneeboard_dir=None,
             dtc_preset_target=None,
             in_game_dtc_target=None,
             loadout_dir=None,
@@ -117,11 +120,58 @@ def _build_install_plan(package_info: PackageInfo, options: InstallOptions) -> I
     if package_info.loadout_entries:
         loadout_dir = dcs_saved_games_folder / "MissionEditor" / "UnitPayloads"
 
+    custom_kneeboard_dir: Path | None = None
+    if options.custom_kneeboard_path is not None:
+        custom_kneeboard_dir = options.custom_kneeboard_path
+
     return InstallPlan(
         kneeboard_dir=kneeboard_dir,
+        custom_kneeboard_dir=custom_kneeboard_dir,
         dtc_preset_target=dtc_preset_target,
         in_game_dtc_target=in_game_dtc_target,
         loadout_dir=loadout_dir,
+    )
+
+
+def _get_custom_kneeboard_tracker_path(custom_dir: Path) -> Path:
+    return custom_dir / CUSTOM_KNEEBOARD_TRACKER_FILE
+
+
+def _read_custom_kneeboard_tracked_files(custom_dir: Path) -> list[Path]:
+    tracker_path = _get_custom_kneeboard_tracker_path(custom_dir)
+    if not tracker_path.exists() or not tracker_path.is_file():
+        return []
+
+    try:
+        payload = json.loads(tracker_path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError, ValueError):
+        return []
+
+    installed_files_raw = payload.get("installedFiles", [])
+    if not isinstance(installed_files_raw, list):
+        return []
+
+    tracked_files: set[Path] = set()
+    for item in installed_files_raw:
+        file_name = Path(str(item)).name
+        if not file_name:
+            continue
+        tracked_files.add(custom_dir / file_name)
+
+    return sorted(tracked_files, key=lambda item: str(item).lower())
+
+
+def _write_custom_kneeboard_tracker(custom_dir: Path, installed_files: list[Path]) -> None:
+    tracker_path = _get_custom_kneeboard_tracker_path(custom_dir)
+    unique_names = sorted({path.name for path in installed_files if path.name})
+    payload = {
+        "version": 1,
+        "updatedAtUtc": datetime.now(timezone.utc).isoformat(),
+        "installedFiles": unique_names,
+    }
+    tracker_path.write_text(
+        json.dumps(payload, indent=2, ensure_ascii=False),
+        encoding="utf-8",
     )
 
 
@@ -188,6 +238,11 @@ def _collect_cleanup_candidates(
             target_file = plan.loadout_dir / Path(entry).name
             if target_file.exists():
                 candidates.add(target_file)
+
+    if plan.custom_kneeboard_dir:
+        for tracked_file in _read_custom_kneeboard_tracked_files(plan.custom_kneeboard_dir):
+            if tracked_file.exists() and tracked_file.is_file():
+                candidates.add(tracked_file)
 
     return sorted(candidates)
 
@@ -278,6 +333,11 @@ def _write_install_manifest(result: InstallResult, options: InstallOptions) -> N
         "selectedVariant": options.saved_games_path.name,
         "selectedDcsSavedGamesFolder": str(options.saved_games_path),
         "dtcAppPath": str(options.dtc_app_path) if options.dtc_app_path else None,
+        "customKneeboardPath": (
+            str(options.custom_kneeboard_path)
+            if options.custom_kneeboard_path
+            else None
+        ),
         "dtcManualCloseRequired": result.dtc_manual_close_required,
         "installedFiles": [str(path) for path in result.installed_files],
         "removedFiles": [str(path) for path in result.removed_files],
@@ -561,6 +621,17 @@ def _install_standard_package(
             raise ValueError("Install plan did not produce a kneeboard destination.")
 
         plan.kneeboard_dir.mkdir(parents=True, exist_ok=True)
+        custom_kneeboard_dir = plan.custom_kneeboard_dir
+        custom_kneeboard_copies: list[Path] = []
+        if custom_kneeboard_dir is not None:
+            try:
+                custom_kneeboard_dir.mkdir(parents=True, exist_ok=True)
+            except OSError as exc:
+                result.warnings.append(
+                    "Custom kneeboard folder unavailable "
+                    f"({custom_kneeboard_dir}): {exc}"
+                )
+                custom_kneeboard_dir = None
 
         _emit_progress(progress, 60, "Installing kneeboard pages...")
         sorted_png_entries = sorted(package_info.pilot_png_entries)
@@ -573,6 +644,27 @@ def _install_standard_package(
             destination = plan.kneeboard_dir / f"{index:03d}_{manifest.design.name}_OB.png"
             shutil.copy2(source_file, destination)
             result.installed_files.append(destination)
+
+            if custom_kneeboard_dir is not None:
+                custom_destination = custom_kneeboard_dir / destination.name
+                try:
+                    shutil.copy2(source_file, custom_destination)
+                    result.installed_files.append(custom_destination)
+                    custom_kneeboard_copies.append(custom_destination)
+                except OSError as exc:
+                    result.warnings.append(
+                        "Failed to copy kneeboard page to custom folder "
+                        f"({custom_destination}): {exc}"
+                    )
+
+        if custom_kneeboard_dir is not None:
+            try:
+                _write_custom_kneeboard_tracker(custom_kneeboard_dir, custom_kneeboard_copies)
+            except OSError as exc:
+                result.warnings.append(
+                    "Failed to update custom kneeboard tracker "
+                    f"({custom_kneeboard_dir}): {exc}"
+                )
         step_log("Phase: install kneeboard pages")
 
         _emit_progress(progress, 72, "Installing DTC files (if present)...")
@@ -636,7 +728,11 @@ def _install_standard_package(
     step_log("Phase: finalize installation")
 
     if options.open_destinations_after_install:
-        destinations = [path for path in [plan.kneeboard_dir, plan.loadout_dir] if path is not None]
+        destinations = [
+            path
+            for path in [plan.kneeboard_dir, plan.custom_kneeboard_dir, plan.loadout_dir]
+            if path is not None
+        ]
         if plan.dtc_preset_target is not None:
             destinations.append(plan.dtc_preset_target.parent)
         _open_destinations(result, destinations)
@@ -691,6 +787,8 @@ def build_install_preview(package_info: PackageInfo, options: InstallOptions) ->
     lines.append("Target destinations:")
     if plan.kneeboard_dir:
         lines.append(f"- Kneeboards: {plan.kneeboard_dir}")
+    if plan.custom_kneeboard_dir:
+        lines.append(f"- Custom kneeboards: {plan.custom_kneeboard_dir}")
     if plan.dtc_preset_target:
         lines.append(f"- DTC preset: {plan.dtc_preset_target}")
     if plan.in_game_dtc_target:

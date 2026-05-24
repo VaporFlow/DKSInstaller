@@ -2,7 +2,7 @@
 
 Windows desktop installer for DKS flight-plan ZIP packages.
 
-Current version: `v0.6.2`
+Current version: `v0.7.0`
 
 ## Current project layout
 
@@ -44,6 +44,8 @@ The build script auto-detects `python` or `py -3`.
   - sticky source preference (remembers last source type: download/backup/manual)
   - direct `DCS Saved Games Folder` selection (editable)
   - optional `DTC App Path (DTC.exe)` selection
+  - optional `Custom Kneeboard Folder` mirror output
+  - one-click clear for `Custom Kneeboard Folder`
   - optional pre-launch `DTC.exe` process kill (legacy behavior)
   - advanced options in a collapsible section
   - one-click utility to open DCS Saved Games helper folders

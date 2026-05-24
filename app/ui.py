@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+import shutil
 import sys
 from pathlib import Path
 import tkinter as tk
@@ -35,6 +36,9 @@ class DksInstallerApp:
         self.documents_var = tk.StringVar(value=self._normalize_path_text(self.config.documents_path))
         self.dcs_install_var = tk.StringVar(value=self._normalize_path_text(self.config.dcs_install_path))
         self.dtc_app_var = tk.StringVar(value=self._normalize_path_text(self.config.dtc_app_path))
+        self.custom_kneeboard_var = tk.StringVar(
+            value=self._normalize_path_text(self.config.custom_kneeboard_path)
+        )
         self.backup_dir_var = tk.StringVar(
             value=self._normalize_path_text(self.config.backup_dir or str(get_default_backup_dir()))
         )
@@ -108,10 +112,20 @@ class DksInstallerApp:
         ttk.Button(entry_frame, text="Refresh ZIP Lists", command=self._refresh_sources).grid(
             row=3, column=0, sticky="ew", pady=2
         )
-        ttk.Button(
+        tk.Button(
             entry_frame,
             text="Install Latest Download Now",
             command=self._auto_install_latest_now,
+            bg="#0B6E24",
+            fg="white",
+            activebackground="#08561C",
+            activeforeground="white",
+            font=("Segoe UI", 9, "bold"),
+            relief="raised",
+            bd=1,
+            highlightthickness=0,
+            padx=8,
+            pady=4,
         ).grid(row=4, column=0, sticky="ew", pady=2)
 
         ttk.Checkbutton(
@@ -156,6 +170,12 @@ class DksInstallerApp:
             label="Backup Folder",
             variable=self.backup_dir_var,
         )
+        self._add_path_row(
+            parent=env_frame,
+            row=5,
+            label="Custom Kneeboard Folder (optional)",
+            variable=self.custom_kneeboard_var,
+        )
 
         action_frame = ttk.LabelFrame(self.root, text="Actions")
         action_frame.grid(row=2, column=0, padx=10, pady=6, sticky="ew")
@@ -188,8 +208,13 @@ class DksInstallerApp:
             text="Open DCS Saved Games Folders",
             command=self._open_dcs_saved_games_folders,
         ).grid(row=0, column=5, padx=6, pady=8, sticky="ew")
+        ttk.Button(
+            action_frame,
+            text="Clear Custom Kneeboard Folder",
+            command=self._clear_custom_kneeboard_folder,
+        ).grid(row=0, column=6, padx=6, pady=8, sticky="ew")
 
-        for col in range(6):
+        for col in range(7):
             action_frame.grid_columnconfigure(col, weight=1)
 
         advanced_wrap = ttk.LabelFrame(self.root, text="Advanced")
@@ -663,6 +688,8 @@ class DksInstallerApp:
         dcs_install_path = Path(dcs_install_raw) if dcs_install_raw else None
         dtc_app_raw = self.dtc_app_var.get().strip()
         dtc_app_path = Path(dtc_app_raw) if dtc_app_raw else None
+        custom_kneeboard_raw = self.custom_kneeboard_var.get().strip()
+        custom_kneeboard_path = Path(custom_kneeboard_raw) if custom_kneeboard_raw else None
 
         options = InstallOptions(
             mode=mode,
@@ -671,6 +698,7 @@ class DksInstallerApp:
             documents_path=documents_path,
             dcs_install_path=dcs_install_path,
             dtc_app_path=dtc_app_path,
+            custom_kneeboard_path=custom_kneeboard_path,
             kill_dtc_before_launch=self.kill_dtc_before_launch_var.get(),
             backup_dir=backup_dir,
             show_restore_preview=self.show_restore_preview_var.get(),
@@ -707,6 +735,11 @@ class DksInstallerApp:
             else "Aggressive cleanup (bat-like)"
         )
         dtc_line = f"DTC app path: {options.dtc_app_path}\n" if options.dtc_app_path else ""
+        custom_kneeboard_line = (
+            f"Custom kneeboard folder: {options.custom_kneeboard_path}\n"
+            if options.custom_kneeboard_path
+            else ""
+        )
         dtc_kill_line = (
             "Kill running DTC.exe before auto-launch: "
             f"{'Yes' if options.kill_dtc_before_launch else 'No'}\n"
@@ -717,6 +750,7 @@ class DksInstallerApp:
                 f"Action: {action_label}\n"
                 f"DCS Saved Games Folder: {options.saved_games_path}\n"
                 f"{dtc_line}"
+                f"{custom_kneeboard_line}"
                 f"{dtc_kill_line}"
                 f"Cleanup: {cleanup_label}\n\n"
                 f"Source:\n{options.zip_path}\n\n"
@@ -783,6 +817,51 @@ class DksInstallerApp:
         backup_dir.mkdir(parents=True, exist_ok=True)
         os.startfile(str(backup_dir))
 
+    def _clear_custom_kneeboard_folder(self) -> None:
+        custom_folder_raw = self.custom_kneeboard_var.get().strip()
+        if not custom_folder_raw:
+            messagebox.showerror(
+                "Clear Custom Folder",
+                "Custom Kneeboard Folder is empty.",
+            )
+            return
+
+        custom_folder = Path(custom_folder_raw)
+        normalized = Path(os.path.normpath(str(custom_folder)))
+        if str(normalized) in {normalized.anchor, "", "."}:
+            messagebox.showerror(
+                "Clear Custom Folder",
+                "Refusing to clear a root path. Pick a specific folder.",
+            )
+            return
+
+        if not messagebox.askyesno(
+            "Clear Custom Folder",
+            (
+                "Delete everything inside the custom kneeboard folder?\n\n"
+                f"{normalized}\n\n"
+                "This will remove all files/subfolders in that location."
+            ),
+        ):
+            return
+
+        try:
+            if normalized.exists():
+                shutil.rmtree(normalized)
+            normalized.mkdir(parents=True, exist_ok=True)
+        except OSError as exc:
+            messagebox.showerror(
+                "Clear Custom Folder",
+                f"Failed to clear folder: {exc}",
+            )
+            return
+
+        self._append_log(f"Cleared custom kneeboard folder: {normalized}")
+        messagebox.showinfo(
+            "Clear Custom Folder",
+            f"Custom kneeboard folder cleared:\n{normalized}",
+        )
+
     def _open_dcs_saved_games_folders(self) -> None:
         saved_games_raw = self.saved_games_var.get().strip()
         documents_raw = self.documents_var.get().strip()
@@ -821,6 +900,7 @@ class DksInstallerApp:
             documents_path=self._normalize_path_text(self.documents_var.get().strip()),
             dcs_install_path=self._normalize_path_text(self.dcs_install_var.get().strip()),
             dtc_app_path=self._normalize_path_text(self.dtc_app_var.get().strip()),
+            custom_kneeboard_path=self._normalize_path_text(self.custom_kneeboard_var.get().strip()),
             kill_dtc_before_launch=self.kill_dtc_before_launch_var.get(),
             last_source_zip=self._normalize_path_text(self.selected_zip_var.get().strip()),
             last_source_type=self.last_source_type,

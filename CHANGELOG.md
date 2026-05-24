@@ -2,6 +2,17 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.7.0] - 2026-05-24
+
+### Added
+- Added optional **Custom Kneeboard Folder** destination; kneeboard PNGs are now copied to both the standard DCS kneeboard path and the custom path when configured.
+- Added tracked cleanup for custom kneeboard installs: only previously installed DKS kneeboard files are removed from the custom folder before new files are copied.
+- Added **Clear Custom Kneeboard Folder** action button in the UI for OpenKneeboard/external workflow users.
+
+### Changed
+- Styled **Install Latest Download Now** as a dark-green primary action with bold white text.
+- Install preview and history manifest now include custom kneeboard path details when configured.
+
 ## [0.6.2] - 2026-05-24
 
 ### Fixed
