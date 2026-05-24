@@ -606,6 +606,13 @@ class DksInstallerApp:
         if hasattr(result, "summary"):
             lines.append(getattr(result, "summary") or "Operation completed.")
 
+        if hasattr(result, "dtc_manual_close_required") and getattr(
+            result,
+            "dtc_manual_close_required",
+            False,
+        ):
+            lines.append("Manual action required: close DTC.exe before continuing.")
+
         if hasattr(result, "installed_files"):
             lines.append(f"Installed files: {len(getattr(result, 'installed_files', []))}")
         if hasattr(result, "removed_files"):
@@ -727,6 +734,13 @@ class DksInstallerApp:
             log=lambda msg: self.logger.info(msg),
             progress=self._set_progress,
         )
+
+        if getattr(result, "dtc_manual_close_required", False):
+            messagebox.showwarning(
+                "Close DTC.exe",
+                "The installer could not stop DTC.exe automatically.\n\n"
+                "Please close DTC.exe manually before continuing.",
+            )
 
         summary_lines = self._format_result_lines(result)
 

@@ -2,6 +2,14 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.6.1] - 2026-05-24
+
+### Added
+- Added a dedicated warning path when automatic `DTC.exe` termination fails: installer now flags manual-close requirement and records it in install history (`dtcManualCloseRequired`).
+
+### Changed
+- App now shows a warning pop-up instructing the user to close `DTC.exe` manually before continuing when kill-before-launch cannot complete.
+
 ## [0.6.0] - 2026-05-24
 
 ### Added

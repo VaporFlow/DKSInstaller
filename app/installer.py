@@ -278,6 +278,7 @@ def _write_install_manifest(result: InstallResult, options: InstallOptions) -> N
         "selectedVariant": options.saved_games_path.name,
         "selectedDcsSavedGamesFolder": str(options.saved_games_path),
         "dtcAppPath": str(options.dtc_app_path) if options.dtc_app_path else None,
+        "dtcManualCloseRequired": result.dtc_manual_close_required,
         "installedFiles": [str(path) for path in result.installed_files],
         "removedFiles": [str(path) for path in result.removed_files],
         "skippedItems": result.skipped_items,
@@ -327,7 +328,35 @@ def _resolve_dtc_app_path(options: InstallOptions) -> Path | None:
     return None
 
 
-def _kill_running_dtc_processes(result: InstallResult, log: LogCallback) -> None:
+def _is_dtc_process_running() -> bool | None:
+    try:
+        completed = subprocess.run(  # noqa: S603
+            ["tasklist", "/FI", "IMAGENAME eq DTC.exe", "/FO", "CSV", "/NH"],
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+    except OSError:
+        return None
+
+    lines = [line.strip() for line in (completed.stdout or "").splitlines() if line.strip()]
+    for line in lines:
+        first_column = line.split(",", 1)[0].strip().strip('"').lower()
+        if first_column == "dtc.exe":
+            return True
+
+    if lines:
+        return False
+
+    return None
+
+
+def _kill_running_dtc_processes(result: InstallResult, log: LogCallback) -> bool:
+    running_before = _is_dtc_process_running()
+    if running_before is False:
+        log("DTC.exe was not running before launch; no stop needed.")
+        return True
+
     try:
         completed = subprocess.run(  # noqa: S603
             ["taskkill", "/IM", "DTC.exe", "/F"],
@@ -337,11 +366,15 @@ def _kill_running_dtc_processes(result: InstallResult, log: LogCallback) -> None
         )
     except OSError as exc:
         result.warnings.append(f"Failed to run taskkill for DTC.exe: {exc}")
-        return
+        if running_before is True:
+            result.dtc_manual_close_required = True
+        return running_before is not True
 
-    if completed.returncode == 0:
+    running_after = _is_dtc_process_running()
+
+    if completed.returncode == 0 and running_after is not True:
         log("Stopped running DTC.exe process(es) before relaunch.")
-        return
+        return True
 
     combined_output = "\n".join(
         text.strip()
@@ -356,6 +389,15 @@ def _kill_running_dtc_processes(result: InstallResult, log: LogCallback) -> None
         )
     else:
         log("DTC.exe pre-launch stop returned non-zero (non-fatal).")
+
+    if running_after is True or running_before is True:
+        result.dtc_manual_close_required = True
+        result.warnings.append(
+            "Could not stop DTC.exe automatically. Please close DTC.exe manually before continuing."
+        )
+        return False
+
+    return True
 
 
 def _maybe_launch_dtc_app(
@@ -382,7 +424,12 @@ def _maybe_launch_dtc_app(
         return
 
     if options.kill_dtc_before_launch:
-        _kill_running_dtc_processes(result, log)
+        killed = _kill_running_dtc_processes(result, log)
+        if not killed:
+            result.skipped_items.append(
+                "DTC app launch skipped until DTC.exe is closed manually."
+            )
+            return
 
     presets_root = options.documents_path / "DCS-DTC" / "Presets"
     try:

@@ -94,6 +94,7 @@ class InstallResult:
     removed_files: list[Path] = field(default_factory=list)
     skipped_items: list[str] = field(default_factory=list)
     warnings: list[str] = field(default_factory=list)
+    dtc_manual_close_required: bool = False
     backup_zip: Path | None = None
     opened_destinations: list[Path] = field(default_factory=list)
     summary: str = ""
