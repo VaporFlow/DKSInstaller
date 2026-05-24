@@ -2,12 +2,15 @@
 
 Windows desktop installer for DKS flight-plan ZIP packages.
 
+Current version: `v0.6.0`
+
 ## Current project layout
 
 - `app/` - Python application source (tkinter/ttk GUI)
 - `MVP_GUIDE.md` - Scope and product decisions
 - `requirements.txt` - Packaging dependency list
 - `build.ps1` - Build script for PyInstaller
+- `CHANGELOG.md` - Versioned change history
 - `unk/legacy_package/` - Archived legacy sample/package files moved out of root
 
 ## Run (development)
@@ -39,8 +42,9 @@ The build script auto-detects `python` or `py -3`.
   - recent Backups ZIP list
   - manual ZIP selection
   - sticky source preference (remembers last source type: download/backup/manual)
+  - direct `DCS Saved Games Folder` selection (editable)
+  - optional `DTC App Path (DTC.exe)` selection
+  - optional pre-launch `DTC.exe` process kill (legacy behavior)
   - advanced options in a collapsible section
   - one-click utility to open DCS Saved Games helper folders
 - Logs now include per-phase elapsed timing (`step` and `total` seconds) for install/restore pipelines.
-- Loadout `.lua` files are merged into DCS UnitPayloads when `luae.exe` is available.
-  If not found, merge is skipped with a warning (install continues).

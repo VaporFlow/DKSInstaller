@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+import os
 from pathlib import Path
 import re
 
@@ -13,8 +14,10 @@ except ImportError:  # pragma: no cover - windows only runtime
 @dataclass
 class EnvironmentDetection:
     documents_path: Path
+    saved_games_root: Path
     dcs_saved_games_folder: Path
     dcs_install_path: Path | None
+    dtc_app_path: Path | None
 
 
 def _read_registry_string(hive: int, subkey: str, value_name: str) -> str | None:
@@ -118,10 +121,37 @@ def detect_dcs_install_path() -> Path | None:
     return None
 
 
+def detect_dtc_app_path(documents_path: Path) -> Path | None:
+    candidates: list[Path] = []
+
+    local_appdata = os.environ.get("LOCALAPPDATA")
+    if local_appdata:
+        candidates.append(Path(local_appdata) / "DCS-DTC" / "DTC.exe")
+
+    program_files = os.environ.get("PROGRAMFILES")
+    if program_files:
+        candidates.append(Path(program_files) / "DCS-DTC" / "DTC.exe")
+
+    program_files_x86 = os.environ.get("PROGRAMFILES(X86)")
+    if program_files_x86:
+        candidates.append(Path(program_files_x86) / "DCS-DTC" / "DTC.exe")
+
+    candidates.append(documents_path / "DCS-DTC" / "DTC.exe")
+
+    for candidate in candidates:
+        if candidate.exists() and candidate.is_file():
+            return candidate
+
+    return None
+
+
 def detect_environment() -> EnvironmentDetection:
+    documents_path = detect_documents_path()
     saved_games_root = detect_saved_games_path()
     return EnvironmentDetection(
-        documents_path=detect_documents_path(),
+        documents_path=documents_path,
+        saved_games_root=saved_games_root,
         dcs_saved_games_folder=detect_dcs_saved_games_folder(saved_games_root),
         dcs_install_path=detect_dcs_install_path(),
+        dtc_app_path=detect_dtc_app_path(documents_path),
     )

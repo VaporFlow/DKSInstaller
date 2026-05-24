@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import os
 import shutil
+import subprocess
 import time
 import zipfile
 from datetime import datetime, timezone
@@ -13,6 +14,7 @@ from typing import Callable
 from .config import get_local_appdata_dir
 from .loadout_merge import merge_loadouts
 from .models import InstallOptions, InstallPlan, InstallResult, PackageInfo, RestoreEntry
+from .version import APP_VERSION
 
 ProgressCallback = Callable[[int, str], None]
 LogCallback = Callable[[str], None]
@@ -244,6 +246,7 @@ def _create_backup_zip(
 
         backup_manifest = {
             "backupVersion": 1,
+            "appVersion": APP_VERSION,
             "createdAtUtc": datetime.now(timezone.utc).isoformat(),
             "sourceZip": str(options.zip_path),
             "selectedVariant": dcs_folder_label,
@@ -268,11 +271,13 @@ def _write_install_manifest(result: InstallResult, options: InstallOptions) -> N
     history_path = history_dir / f"install-{stamp}.json"
 
     payload = {
+        "appVersion": APP_VERSION,
         "createdAtUtc": datetime.now(timezone.utc).isoformat(),
         "mode": options.mode,
         "sourceZip": str(options.zip_path),
         "selectedVariant": options.saved_games_path.name,
         "selectedDcsSavedGamesFolder": str(options.saved_games_path),
+        "dtcAppPath": str(options.dtc_app_path) if options.dtc_app_path else None,
         "installedFiles": [str(path) for path in result.installed_files],
         "removedFiles": [str(path) for path in result.removed_files],
         "skippedItems": result.skipped_items,
@@ -289,6 +294,111 @@ def _open_destinations(result: InstallResult, destinations: list[Path]) -> None:
         if destination.exists():
             os.startfile(str(destination))
             result.opened_destinations.append(destination)
+
+
+def _resolve_dtc_app_path(options: InstallOptions) -> Path | None:
+    candidates: list[Path] = []
+
+    if options.dtc_app_path:
+        explicit = options.dtc_app_path
+        if explicit.is_dir():
+            candidates.append(explicit / "DTC.exe")
+        else:
+            candidates.append(explicit)
+
+    local_appdata = os.environ.get("LOCALAPPDATA")
+    if local_appdata:
+        candidates.append(Path(local_appdata) / "DCS-DTC" / "DTC.exe")
+
+    program_files = os.environ.get("PROGRAMFILES")
+    if program_files:
+        candidates.append(Path(program_files) / "DCS-DTC" / "DTC.exe")
+
+    program_files_x86 = os.environ.get("PROGRAMFILES(X86)")
+    if program_files_x86:
+        candidates.append(Path(program_files_x86) / "DCS-DTC" / "DTC.exe")
+
+    candidates.append(options.documents_path / "DCS-DTC" / "DTC.exe")
+
+    for candidate in candidates:
+        if candidate.exists() and candidate.is_file():
+            return candidate
+
+    return None
+
+
+def _kill_running_dtc_processes(result: InstallResult, log: LogCallback) -> None:
+    try:
+        completed = subprocess.run(  # noqa: S603
+            ["taskkill", "/IM", "DTC.exe", "/F"],
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+    except OSError as exc:
+        result.warnings.append(f"Failed to run taskkill for DTC.exe: {exc}")
+        return
+
+    if completed.returncode == 0:
+        log("Stopped running DTC.exe process(es) before relaunch.")
+        return
+
+    combined_output = "\n".join(
+        text.strip()
+        for text in [completed.stdout, completed.stderr]
+        if text and text.strip()
+    )
+    if combined_output:
+        first_line = combined_output.splitlines()[0]
+        log(
+            "DTC.exe pre-launch stop returned non-zero (non-fatal): "
+            f"{first_line}"
+        )
+    else:
+        log("DTC.exe pre-launch stop returned non-zero (non-fatal).")
+
+
+def _maybe_launch_dtc_app(
+    package_info: PackageInfo,
+    plan: InstallPlan,
+    options: InstallOptions,
+    result: InstallResult,
+    log: LogCallback,
+) -> None:
+    if package_info.manifest is None:
+        return
+
+    if package_info.manifest.aircraft.dtc_in_dcs_folder:
+        return
+
+    if plan.dtc_preset_target is None or not plan.dtc_preset_target.exists():
+        return
+
+    dtc_exe = _resolve_dtc_app_path(options)
+    if dtc_exe is None:
+        result.skipped_items.append(
+            "DTC app launch skipped (DTC.exe not found). Preset was copied successfully."
+        )
+        return
+
+    if options.kill_dtc_before_launch:
+        _kill_running_dtc_processes(result, log)
+
+    presets_root = options.documents_path / "DCS-DTC" / "Presets"
+    try:
+        relative_preset = plan.dtc_preset_target.relative_to(presets_root)
+        load_arg = str(relative_preset).replace("\\", "/")
+    except ValueError:
+        load_arg = str(plan.dtc_preset_target)
+
+    try:
+        subprocess.Popen(  # noqa: S603
+            [str(dtc_exe), "--load", load_arg],
+            cwd=str(dtc_exe.parent),
+        )
+        log(f"Launched DTC app with preset: {load_arg}")
+    except OSError as exc:
+        result.warnings.append(f"Failed to launch DTC.exe automatically: {exc}")
 
 
 def _install_backup_snapshot(
@@ -438,6 +548,8 @@ def _install_standard_package(
                 plan.in_game_dtc_target.parent.mkdir(parents=True, exist_ok=True)
                 shutil.copy2(source_ingame, plan.in_game_dtc_target)
                 result.installed_files.append(plan.in_game_dtc_target)
+
+        _maybe_launch_dtc_app(package_info, plan, options, result, log)
         step_log("Phase: install DTC artifacts")
 
         _emit_progress(progress, 84, "Processing loadouts (if present)...")
@@ -515,6 +627,12 @@ def build_install_preview(package_info: PackageInfo, options: InstallOptions) ->
 
     lines.append("Source Type: DKS Package")
     lines.append(f"DCS Saved Games Folder: {options.saved_games_path}")
+    if options.dtc_app_path:
+        lines.append(f"DTC app path: {options.dtc_app_path}")
+    lines.append(
+        "Kill running DTC.exe before auto-launch: "
+        f"{'yes' if options.kill_dtc_before_launch else 'no'}"
+    )
     lines.append(
         f"Cleanup mode: {'Safe (current package only)' if options.safe_cleanup_mode else 'Aggressive (legacy-style DKS cleanup)'}"
     )

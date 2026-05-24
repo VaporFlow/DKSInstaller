@@ -1,25 +1,28 @@
 from __future__ import annotations
 
 import os
+import sys
 from pathlib import Path
 import tkinter as tk
 from tkinter import filedialog, messagebox, ttk
 from tkinter.scrolledtext import ScrolledText
 
-from .config import get_default_backup_dir, load_config, save_config
+from .config import get_default_backup_dir, get_runtime_dir, load_config, save_config
 from .detect import detect_environment
 from .installer import build_install_preview, install_package
 from .logging_utils import get_log_dir, setup_logger
 from .models import AppConfig, InstallMode, InstallOptions, PackageInfo
 from .package_reader import list_recent_zip_files, read_package_info, validate_package
+from .version import APP_TITLE
 
 
 class DksInstallerApp:
     def __init__(self, root: tk.Tk) -> None:
         self.root = root
-        self.root.title("DKS Flight Plan Installer")
+        self.root.title(APP_TITLE)
         self.root.geometry("1100x760")
         self.root.minsize(980, 680)
+        self._set_window_icon()
 
         self.config = load_config()
         self.package_cache: dict[str, PackageInfo] = {}
@@ -27,12 +30,13 @@ class DksInstallerApp:
         self.backup_zip_paths: list[Path] = []
         self.last_source_type = self._normalize_source_type(self.config.last_source_type)
 
-        self.selected_zip_var = tk.StringVar(value=self.config.last_source_zip)
-        self.saved_games_var = tk.StringVar(value=self.config.saved_games_path)
-        self.documents_var = tk.StringVar(value=self.config.documents_path)
-        self.dcs_install_var = tk.StringVar(value=self.config.dcs_install_path)
+        self.selected_zip_var = tk.StringVar(value=self._normalize_path_text(self.config.last_source_zip))
+        self.saved_games_var = tk.StringVar(value=self._normalize_path_text(self.config.saved_games_path))
+        self.documents_var = tk.StringVar(value=self._normalize_path_text(self.config.documents_path))
+        self.dcs_install_var = tk.StringVar(value=self._normalize_path_text(self.config.dcs_install_path))
+        self.dtc_app_var = tk.StringVar(value=self._normalize_path_text(self.config.dtc_app_path))
         self.backup_dir_var = tk.StringVar(
-            value=self.config.backup_dir or str(get_default_backup_dir())
+            value=self._normalize_path_text(self.config.backup_dir or str(get_default_backup_dir()))
         )
 
         self.auto_install_latest_var = tk.BooleanVar(
@@ -47,11 +51,15 @@ class DksInstallerApp:
         self.open_destinations_var = tk.BooleanVar(
             value=self.config.open_destinations_after_install
         )
+        self.kill_dtc_before_launch_var = tk.BooleanVar(
+            value=self.config.kill_dtc_before_launch
+        )
 
         self.advanced_visible = False
 
         self._build_layout()
         self.logger = setup_logger(ui_callback=self._append_log)
+        self.logger.info("Launching %s", APP_TITLE)
 
         self._detect_environment()
         self._refresh_sources()
@@ -135,9 +143,16 @@ class DksInstallerApp:
             label="DCS Install (optional)",
             variable=self.dcs_install_var,
         )
-        self._add_path_row(
+        self._add_file_row(
             parent=env_frame,
             row=3,
+            label="DTC App Path (DTC.exe, optional)",
+            variable=self.dtc_app_var,
+            filetypes=[("DTC executable", "DTC.exe"), ("Executables", "*.exe"), ("All files", "*.*")],
+        )
+        self._add_path_row(
+            parent=env_frame,
+            row=4,
             label="Backup Folder",
             variable=self.backup_dir_var,
         )
@@ -173,14 +188,6 @@ class DksInstallerApp:
             text="Open DCS Saved Games Folders",
             command=self._open_dcs_saved_games_folders,
         ).grid(row=0, column=5, padx=6, pady=8, sticky="ew")
-
-        ttk.Label(
-            action_frame,
-            text=(
-                "Loadout .lua files are merged into DCS UnitPayloads when DCS luae.exe is available. "
-                "If not, loadout merge is skipped with a warning."
-            ),
-        ).grid(row=1, column=0, columnspan=6, padx=6, pady=(0, 8), sticky="w")
 
         for col in range(6):
             action_frame.grid_columnconfigure(col, weight=1)
@@ -228,10 +235,17 @@ class DksInstallerApp:
             command=self._save_config_from_ui,
         ).grid(row=3, column=0, sticky="w", pady=2)
 
+        ttk.Checkbutton(
+            self.advanced_frame,
+            text="Kill running DTC.exe before auto-launch (legacy behavior)",
+            variable=self.kill_dtc_before_launch_var,
+            command=self._save_config_from_ui,
+        ).grid(row=4, column=0, sticky="w", pady=2)
+
         ttk.Label(
             self.advanced_frame,
             text="Default when Safe Cleanup is OFF: Aggressive bat-like cleanup.",
-        ).grid(row=4, column=0, sticky="w", pady=(4, 0))
+        ).grid(row=5, column=0, sticky="w", pady=(4, 0))
 
         self.advanced_frame.grid_remove()
 
@@ -250,6 +264,22 @@ class DksInstallerApp:
 
         self.log_text = ScrolledText(status_frame, height=14, state="disabled")
         self.log_text.grid(row=1, column=0, padx=6, pady=(0, 6), sticky="nsew")
+
+    def _set_window_icon(self) -> None:
+        icon_candidates: list[Path] = []
+
+        if getattr(sys, "frozen", False):
+            icon_candidates.append(Path(sys.executable))
+
+        icon_candidates.append(get_runtime_dir() / "assets" / "dks-web-favicon.ico")
+
+        for candidate in icon_candidates:
+            try:
+                if candidate.exists():
+                    self.root.iconbitmap(str(candidate))
+                    return
+            except (tk.TclError, OSError):
+                continue
 
     def _add_path_row(
         self,
@@ -289,6 +319,27 @@ class DksInstallerApp:
         self.root.update_idletasks()
 
     @staticmethod
+    def _normalize_path_text(path_value: str | Path) -> str:
+        if not path_value:
+            return ""
+        return os.path.normpath(str(path_value))
+
+    @staticmethod
+    def _looks_like_saved_games_root(folder: Path) -> bool:
+        if folder.name.lower() == "saved games":
+            return True
+
+        if folder.exists() and folder.is_dir() and not folder.name.upper().startswith("DCS"):
+            try:
+                for child in folder.iterdir():
+                    if child.is_dir() and child.name.upper().startswith("DCS"):
+                        return True
+            except OSError:
+                return False
+
+        return False
+
+    @staticmethod
     def _normalize_source_type(value: str) -> str:
         if value in {"download", "backup", "manual"}:
             return value
@@ -296,6 +347,28 @@ class DksInstallerApp:
 
     def _set_source_type(self, source_type: str) -> None:
         self.last_source_type = self._normalize_source_type(source_type)
+
+    def _add_file_row(
+        self,
+        parent: ttk.LabelFrame,
+        row: int,
+        label: str,
+        variable: tk.StringVar,
+        filetypes: list[tuple[str, str]],
+    ) -> None:
+        ttk.Label(parent, text=label).grid(row=row, column=0, padx=6, pady=4, sticky="w")
+        ttk.Entry(parent, textvariable=variable).grid(
+            row=row,
+            column=1,
+            padx=6,
+            pady=4,
+            sticky="ew",
+        )
+        ttk.Button(
+            parent,
+            text="Browse...",
+            command=lambda var=variable, ft=filetypes: self._browse_file(var, ft),
+        ).grid(row=row, column=2, padx=6, pady=4, sticky="ew")
 
     def _set_progress(self, value: int, message: str) -> None:
         self.progress_var.set(max(0, min(100, value)))
@@ -305,12 +378,25 @@ class DksInstallerApp:
     def _detect_environment(self) -> None:
         detected = detect_environment()
 
-        if not self.saved_games_var.get().strip():
-            self.saved_games_var.set(str(detected.dcs_saved_games_folder))
+        current_saved_games = self.saved_games_var.get().strip()
+        detected_dcs_folder = self._normalize_path_text(detected.dcs_saved_games_folder)
+        if not current_saved_games:
+            self.saved_games_var.set(detected_dcs_folder)
+        else:
+            current_path = Path(current_saved_games)
+            if self._looks_like_saved_games_root(current_path) and current_path != Path(detected_dcs_folder):
+                self.saved_games_var.set(detected_dcs_folder)
+                self._append_log(
+                    "Auto-updated DCS Saved Games Folder from Saved Games root "
+                    f"to detected DCS folder: {detected_dcs_folder}"
+                )
+
         if not self.documents_var.get().strip():
-            self.documents_var.set(str(detected.documents_path))
+            self.documents_var.set(self._normalize_path_text(detected.documents_path))
         if not self.dcs_install_var.get().strip() and detected.dcs_install_path is not None:
-            self.dcs_install_var.set(str(detected.dcs_install_path))
+            self.dcs_install_var.set(self._normalize_path_text(detected.dcs_install_path))
+        if not self.dtc_app_var.get().strip() and detected.dtc_app_path is not None:
+            self.dtc_app_var.set(self._normalize_path_text(detected.dtc_app_path))
 
         self._save_config_from_ui()
 
@@ -399,15 +485,26 @@ class DksInstallerApp:
             initialdir=initial_dir,
         )
         if selected:
-            self.selected_zip_var.set(selected)
+            self.selected_zip_var.set(self._normalize_path_text(selected))
             self._set_source_type("manual")
+            self._save_config_from_ui()
+
+    def _browse_file(self, var: tk.StringVar, filetypes: list[tuple[str, str]]) -> None:
+        initial_dir = str(Path(var.get().strip()).parent) if var.get().strip() else str(Path.home())
+        selected = filedialog.askopenfilename(
+            title="Select file",
+            filetypes=filetypes,
+            initialdir=initial_dir,
+        )
+        if selected:
+            var.set(self._normalize_path_text(selected))
             self._save_config_from_ui()
 
     def _browse_folder(self, var: tk.StringVar) -> None:
         initial_dir = var.get().strip() or str(Path.home())
         selected = filedialog.askdirectory(title="Select folder", initialdir=initial_dir)
         if selected:
-            var.set(selected)
+            var.set(self._normalize_path_text(selected))
             self._save_config_from_ui()
 
     def _get_package_info(self, zip_path: Path) -> PackageInfo:
@@ -557,6 +654,8 @@ class DksInstallerApp:
 
         dcs_install_raw = self.dcs_install_var.get().strip()
         dcs_install_path = Path(dcs_install_raw) if dcs_install_raw else None
+        dtc_app_raw = self.dtc_app_var.get().strip()
+        dtc_app_path = Path(dtc_app_raw) if dtc_app_raw else None
 
         options = InstallOptions(
             mode=mode,
@@ -564,6 +663,8 @@ class DksInstallerApp:
             saved_games_path=saved_games_path,
             documents_path=documents_path,
             dcs_install_path=dcs_install_path,
+            dtc_app_path=dtc_app_path,
+            kill_dtc_before_launch=self.kill_dtc_before_launch_var.get(),
             backup_dir=backup_dir,
             show_restore_preview=self.show_restore_preview_var.get(),
             write_install_manifest=self.write_manifest_var.get(),
@@ -598,11 +699,18 @@ class DksInstallerApp:
             if options.safe_cleanup_mode
             else "Aggressive cleanup (bat-like)"
         )
+        dtc_line = f"DTC app path: {options.dtc_app_path}\n" if options.dtc_app_path else ""
+        dtc_kill_line = (
+            "Kill running DTC.exe before auto-launch: "
+            f"{'Yes' if options.kill_dtc_before_launch else 'No'}\n"
+        )
         if not messagebox.askyesno(
             "Confirm Install",
             (
                 f"Action: {action_label}\n"
                 f"DCS Saved Games Folder: {options.saved_games_path}\n"
+                f"{dtc_line}"
+                f"{dtc_kill_line}"
                 f"Cleanup: {cleanup_label}\n\n"
                 f"Source:\n{options.zip_path}\n\n"
                 "Continue?"
@@ -695,12 +803,14 @@ class DksInstallerApp:
 
     def _save_config_from_ui(self) -> None:
         data = AppConfig(
-            saved_games_path=self.saved_games_var.get().strip(),
-            documents_path=self.documents_var.get().strip(),
-            dcs_install_path=self.dcs_install_var.get().strip(),
-            last_source_zip=self.selected_zip_var.get().strip(),
+            saved_games_path=self._normalize_path_text(self.saved_games_var.get().strip()),
+            documents_path=self._normalize_path_text(self.documents_var.get().strip()),
+            dcs_install_path=self._normalize_path_text(self.dcs_install_var.get().strip()),
+            dtc_app_path=self._normalize_path_text(self.dtc_app_var.get().strip()),
+            kill_dtc_before_launch=self.kill_dtc_before_launch_var.get(),
+            last_source_zip=self._normalize_path_text(self.selected_zip_var.get().strip()),
             last_source_type=self.last_source_type,
-            backup_dir=self.backup_dir_var.get().strip(),
+            backup_dir=self._normalize_path_text(self.backup_dir_var.get().strip()),
             auto_install_latest_enabled=self.auto_install_latest_var.get(),
             show_restore_preview=self.show_restore_preview_var.get(),
             write_install_manifest=self.write_manifest_var.get(),
