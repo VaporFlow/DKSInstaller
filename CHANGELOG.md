@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.9.1] - 2026-05-25
+
+### Fixed
+- Backup ZIPs now default to the persistent `%LOCALAPPDATA%\DKSInstaller\backups` folder so they survive across app versions and release locations.
+- Config migration now resets stale temp-backed backup paths to the persistent LocalAppData backup folder.
+- Config migration now clears temp-backed **Custom DKS ZIP Folder** values so the field stays blank until the user explicitly chooses a folder.
+
 ## [0.9.0] - 2026-05-25
 
 ### Added

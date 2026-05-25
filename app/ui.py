@@ -226,21 +226,21 @@ class DksInstallerApp:
 
         ttk.Button(
             top_actions_row,
-            text="Validate ZIP\nPackage",
+            text="Validate Selected\nZIP Package",
             command=self._validate_package,
             style="UtilityAction.TButton",
             width=25,
         ).grid(row=0, column=0, padx=10, sticky="")
         ttk.Button(
             top_actions_row,
-            text="Install Only\n(Overwrite DKS Files)",
+            text="Install Selected\n(Overwrite DKS Files)",
             command=lambda: self._run_install("install_only"),
             style="SuccessAction.TButton",
             width=25,
         ).grid(row=0, column=1, padx=10, sticky="")
         ttk.Button(
             top_actions_row,
-            text="Backup Current and\nInstall",
+            text="Backup Current and\nInstall Selected",
             command=lambda: self._run_install("backup_install"),
             style="PrimaryAction.TButton",
             width=25,
@@ -1016,7 +1016,11 @@ class DksInstallerApp:
             if not self._show_preview_dialog("Install Preview", preview):
                 return
 
-        action_label = "Backup Current + Install" if mode == "backup_install" else "Install Only"
+        action_label = (
+            "Backup Current + Install Selected"
+            if mode == "backup_install"
+            else "Install Selected"
+        )
         cleanup_label = (
             "Safe cleanup (current package only)"
             if options.safe_cleanup_mode

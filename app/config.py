@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import os
 import sys
+import tempfile
 from pathlib import Path
 
 from .models import AppConfig
@@ -41,14 +42,69 @@ def is_writable_directory(path: Path) -> bool:
         return False
 
 
-def get_default_backup_dir() -> Path:
-    runtime_backup = get_runtime_dir() / "backups"
-    if is_writable_directory(runtime_backup):
-        return runtime_backup
+def _normalize_path_value(value: str | Path) -> str:
+    return os.path.normpath(str(value)).strip()
 
-    fallback = get_local_appdata_dir() / "backups"
-    fallback.mkdir(parents=True, exist_ok=True)
-    return fallback
+
+def _is_same_or_child_path(path: Path, parent: Path) -> bool:
+    normalized_path = os.path.normcase(os.path.abspath(str(path)))
+    normalized_parent = os.path.normcase(os.path.abspath(str(parent)))
+
+    try:
+        return os.path.commonpath([normalized_path, normalized_parent]) == normalized_parent
+    except ValueError:
+        return False
+
+
+def _is_temporary_path(path: Path) -> bool:
+    return _is_same_or_child_path(path, Path(tempfile.gettempdir()))
+
+
+def _migrate_config(config: AppConfig) -> bool:
+    changed = False
+
+    default_backup_dir = _normalize_path_value(get_local_appdata_dir() / "backups")
+    legacy_runtime_backup_dir = get_runtime_dir() / "backups"
+
+    if not config.backup_dir.strip():
+        config.backup_dir = default_backup_dir
+        changed = True
+    else:
+        backup_dir = Path(config.backup_dir)
+        if (
+            _is_same_or_child_path(backup_dir, legacy_runtime_backup_dir)
+            or _is_temporary_path(backup_dir)
+        ):
+            config.backup_dir = default_backup_dir
+            changed = True
+        else:
+            normalized_backup_dir = _normalize_path_value(config.backup_dir)
+            if config.backup_dir != normalized_backup_dir:
+                config.backup_dir = normalized_backup_dir
+                changed = True
+
+    if config.custom_zip_folder.strip():
+        custom_zip_folder = Path(config.custom_zip_folder)
+        if _is_temporary_path(custom_zip_folder):
+            config.custom_zip_folder = ""
+            changed = True
+        else:
+            normalized_custom_zip_folder = _normalize_path_value(config.custom_zip_folder)
+            if config.custom_zip_folder != normalized_custom_zip_folder:
+                config.custom_zip_folder = normalized_custom_zip_folder
+                changed = True
+
+    if not config.custom_zip_folder and config.last_source_type == "custom":
+        config.last_source_type = "download"
+        changed = True
+
+    return changed
+
+
+def get_default_backup_dir() -> Path:
+    backup_dir = get_local_appdata_dir() / "backups"
+    backup_dir.mkdir(parents=True, exist_ok=True)
+    return backup_dir
 
 
 def load_config() -> AppConfig:
@@ -64,8 +120,8 @@ def load_config() -> AppConfig:
     except (OSError, json.JSONDecodeError, ValueError):
         config = AppConfig()
 
-    if not config.backup_dir:
-        config.backup_dir = str(get_default_backup_dir())
+    if _migrate_config(config):
+        save_config(config)
 
     return config
 

@@ -2,7 +2,7 @@
 
 Windows desktop installer for Digital Kneeboard Simulator (DKS) flight-plan ZIP packages.
 
-Current version: `v0.9.0`
+Current version: `v0.9.1`
 
 ![DKS Installer main window](docs/media/01-main-window.png)
 
