@@ -60,6 +60,8 @@ On first launch, verify these fields:
   - Example: `C:\Users\<you>\Saved Games\DCS.openbeta`
 - **DTC App Path (DTC.exe)** (optional)
   - Only needed if you want DTC auto-launch integration.
+- **Custom DKS ZIP Folder** (optional)
+  - Lets you surface ZIPs from a folder outside Downloads/backups.
 - **Custom Kneeboard Folder** (optional)
   - Useful for mirrored export destinations.
 
@@ -67,6 +69,7 @@ Then choose a ZIP source:
 
 - Recent Downloads ZIP list
 - Recent Backups ZIP list
+- Custom DKS ZIP Folder ZIP list
 - Manual ZIP picker
 - Auto-install latest ZIP
 
@@ -97,7 +100,7 @@ Behavior:
 ## 4) Typical install flow
 
 1. Launch `DKSInstaller.exe`.
-2. Select ZIP source.
+2. Select a ZIP source (Downloads, Backups, Custom DKS ZIP Folder, or manual picker).
 3. Confirm paths (Saved Games, optional DTC path, optional custom kneeboard path).
 4. Click one action:
    - **Install Only**, or

@@ -2,6 +2,18 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.9.0] - 2026-05-25
+
+### Added
+- Added a persisted **Custom DKS ZIP Folder** selector with a dedicated Browse button in the source panel.
+- Added a third recent-source list for ZIP files discovered in the selected custom folder.
+
+### Changed
+- Moved the Downloads quick-install button under the **Recent Downloads** source list and added matching green one-click install buttons for **Recent Backups** and **Custom DKS ZIP Folder**.
+- Switched **Install Only (Overwrite DKS Files)** to the green success-action style and centered button labels consistently across the UI.
+- ZIP source refresh now reports custom-folder ZIPs alongside Downloads and Backups.
+- ZIP source scanning now safely ignores paths that exist but are not directories.
+
 ## [0.8.2] - 2026-05-24
 
 ### Changed

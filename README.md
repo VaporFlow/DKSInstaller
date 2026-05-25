@@ -2,7 +2,7 @@
 
 Windows desktop installer for Digital Kneeboard Simulator (DKS) flight-plan ZIP packages.
 
-Current version: `v0.8.2`
+Current version: `v0.9.0`
 
 ![DKS Installer main window](docs/media/01-main-window.png)
 
@@ -19,10 +19,11 @@ Open the latest release, expand **Assets**, download `DKSInstaller.exe`, then ru
 ## Quick start
 
 1. Launch `DKSInstaller.exe`.
-2. Pick a DKS flight-plan ZIP from **Recent Downloads**, **Recent Backups**, or **Pick ZIP Manually...**.
+2. Pick a DKS flight-plan ZIP from **Recent Downloads**, **Recent Backups**, **Custom DKS ZIP Folder**, or **Pick ZIP Manually...**.
 3. Confirm your **DCS Saved Games Folder**.
 4. Optionally set:
    - **DTC App Path (DTC.exe)**
+   - **Custom DKS ZIP Folder**
    - **Custom Kneeboard Folder**
 5. Click either:
    - **Install Only (Overwrite DKS Files)**
@@ -35,7 +36,7 @@ Open the latest release, expand **Assets**, download `DKSInstaller.exe`, then ru
 
 - Installs kneeboard pages from DKS ZIP packages.
 - Supports direct install or backup-before-install workflows.
-- Finds recent ZIPs from Downloads and previous backups.
+- Finds recent ZIPs from Downloads, a custom ZIP folder, and previous backups.
 - Supports manual ZIP selection.
 - Can auto-install the latest Downloads ZIP.
 - Persists user paths/preferences locally.

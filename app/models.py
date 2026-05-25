@@ -109,6 +109,7 @@ class AppConfig:
     dcs_install_path: str = ""
     dtc_app_path: str = ""
     custom_kneeboard_path: str = ""
+    custom_zip_folder: str = ""
     kill_dtc_before_launch: bool = True
     last_source_zip: str = ""
     last_source_type: str = "download"
@@ -126,6 +127,7 @@ class AppConfig:
             "dcs_install_path": self.dcs_install_path,
             "dtc_app_path": self.dtc_app_path,
             "custom_kneeboard_path": self.custom_kneeboard_path,
+            "custom_zip_folder": self.custom_zip_folder,
             "kill_dtc_before_launch": self.kill_dtc_before_launch,
             "last_source_zip": self.last_source_zip,
             "last_source_type": self.last_source_type,
@@ -145,6 +147,7 @@ class AppConfig:
             dcs_install_path=str(data.get("dcs_install_path", "")),
             dtc_app_path=str(data.get("dtc_app_path", "")),
             custom_kneeboard_path=str(data.get("custom_kneeboard_path", "")),
+            custom_zip_folder=str(data.get("custom_zip_folder", "")),
             kill_dtc_before_launch=bool(data.get("kill_dtc_before_launch", True)),
             last_source_zip=str(data.get("last_source_zip", "")),
             last_source_type=str(data.get("last_source_type", "download")),

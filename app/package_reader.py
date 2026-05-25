@@ -24,7 +24,7 @@ class ValidationResult:
 
 
 def list_recent_zip_files(folder: Path, limit: int = 10) -> list[Path]:
-    if not folder.exists():
+    if not folder.exists() or not folder.is_dir():
         return []
 
     zips = [path for path in folder.glob("*.zip") if path.is_file()]
