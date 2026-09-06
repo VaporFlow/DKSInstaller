@@ -75,6 +75,7 @@ class DksInstallerApp:
 
         self._detect_environment()
         self._refresh_sources()
+        self.root.state("zoomed")
 
         self.root.after(400, self._maybe_auto_install_latest)
 

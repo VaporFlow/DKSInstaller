@@ -11,6 +11,7 @@ All notable changes to this project will be documented in this file.
 - Config save now preserves extra keys written by the bundled `install.ps1` (for example `install_mode`).
 
 ### Changed
+- Main window now opens maximized.
 - In-game `*_OB.dtc` cartridges now install to `<writedir>\DTC\` (June 2026 DCS path) and clean both that folder and the pre-patch writedir root.
 - Loadout cleanup now runs `merge-loadouts.lua --remove-only` instead of deleting the whole UnitPayloads file, so user payloads survive.
 - Aggressive cleanup also covers MB-339A loadouts and every Route Tool theatre file.
