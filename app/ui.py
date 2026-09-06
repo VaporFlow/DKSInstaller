@@ -63,6 +63,9 @@ class DksInstallerApp:
         self.kill_dtc_before_launch_var = tk.BooleanVar(
             value=self.config.kill_dtc_before_launch
         )
+        self.set_multiplayer_name_var = tk.BooleanVar(
+            value=self.config.set_multiplayer_name
+        )
 
         self.advanced_visible = False
 
@@ -331,10 +334,17 @@ class DksInstallerApp:
             command=self._save_config_from_ui,
         ).grid(row=4, column=0, sticky="w", pady=2)
 
+        ttk.Checkbutton(
+            self.advanced_frame,
+            text="Set DCS multiplayer name when the package requests it",
+            variable=self.set_multiplayer_name_var,
+            command=self._save_config_from_ui,
+        ).grid(row=5, column=0, sticky="w", pady=2)
+
         ttk.Label(
             self.advanced_frame,
             text="Default when Safe Cleanup is OFF: Aggressive bat-like cleanup.",
-        ).grid(row=5, column=0, sticky="w", pady=(4, 0))
+        ).grid(row=6, column=0, sticky="w", pady=(4, 0))
 
         self.advanced_frame.grid_remove()
 
@@ -854,6 +864,23 @@ class DksInstallerApp:
                 details.append(
                     f"Loadout files: {len(result.package_info.loadout_entries)}"
                 )
+                details.append(
+                    "Route Tool preset: "
+                    + (
+                        result.package_info.manifest.route_tool.map_file_name
+                        if result.package_info.manifest.route_tool
+                        and result.package_info.route_preset_entry
+                        else "no"
+                    )
+                )
+                details.append(
+                    "AJS37 cartridge: "
+                    + ("yes" if result.package_info.ajs37_cartridge_entry else "no")
+                )
+                if result.package_info.manifest.multiplayer:
+                    details.append(
+                        f"Multiplayer name: {result.package_info.manifest.multiplayer.name}"
+                    )
             if result.package_info.kind == "backup_snapshot" and result.package_info.backup_manifest:
                 details.append(
                     "Restore entries: "
@@ -993,6 +1020,7 @@ class DksInstallerApp:
             write_install_manifest=self.write_manifest_var.get(),
             safe_cleanup_mode=self.safe_cleanup_mode_var.get(),
             open_destinations_after_install=self.open_destinations_var.get(),
+            set_multiplayer_name=self.set_multiplayer_name_var.get(),
         )
         return options
 
@@ -1167,8 +1195,17 @@ class DksInstallerApp:
         kneeboard_dir = dcs_saved_games_folder / "Kneeboard"
         loadouts_dir = dcs_saved_games_folder / "MissionEditor" / "UnitPayloads"
         dtc_presets_dir = Path(documents_raw) / "DCS-DTC" / "Presets"
+        in_game_dtc_dir = dcs_saved_games_folder / "DTC"
+        route_tool_dir = dcs_saved_games_folder / "Config" / "RouteToolPresets"
 
-        folders = [dcs_saved_games_folder, kneeboard_dir, loadouts_dir, dtc_presets_dir]
+        folders = [
+            dcs_saved_games_folder,
+            kneeboard_dir,
+            loadouts_dir,
+            dtc_presets_dir,
+            in_game_dtc_dir,
+            route_tool_dir,
+        ]
         opened: list[Path] = []
 
         try:
@@ -1202,6 +1239,8 @@ class DksInstallerApp:
             write_install_manifest=self.write_manifest_var.get(),
             safe_cleanup_mode=self.safe_cleanup_mode_var.get(),
             open_destinations_after_install=self.open_destinations_var.get(),
+            set_multiplayer_name=self.set_multiplayer_name_var.get(),
+            extra=self.config.extra,
         )
         save_config(data)
 

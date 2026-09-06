@@ -26,10 +26,22 @@ class AircraftInfo:
 
 
 @dataclass
+class RouteToolInfo:
+    map_file_name: str
+
+
+@dataclass
+class MultiplayerInfo:
+    name: str
+
+
+@dataclass
 class PackageManifest:
     manifest_version: int
     design: DesignInfo
     aircraft: AircraftInfo
+    route_tool: RouteToolInfo | None = None
+    multiplayer: MultiplayerInfo | None = None
 
 
 @dataclass
@@ -59,6 +71,9 @@ class PackageInfo:
     in_game_dtc_entry: str | None = None
     loadout_entries: list[str] = field(default_factory=list)
     merge_script_entry: str | None = None
+    route_preset_entry: str | None = None
+    route_merge_script_entry: str | None = None
+    ajs37_cartridge_entry: str | None = None
     backup_manifest: BackupManifest | None = None
     warnings: list[str] = field(default_factory=list)
 
@@ -69,7 +84,11 @@ class InstallPlan:
     custom_kneeboard_dir: Path | None
     dtc_preset_target: Path | None
     in_game_dtc_target: Path | None
+    in_game_dtc_legacy_target: Path | None
     loadout_dir: Path | None
+    route_tool_target: Path | None
+    ajs37_cartridge_target: Path | None
+    nicknames_path: Path | None
 
 
 @dataclass
@@ -87,6 +106,7 @@ class InstallOptions:
     write_install_manifest: bool
     safe_cleanup_mode: bool
     open_destinations_after_install: bool
+    set_multiplayer_name: bool = True
 
 
 @dataclass
@@ -119,28 +139,54 @@ class AppConfig:
     write_install_manifest: bool = True
     safe_cleanup_mode: bool = False
     open_destinations_after_install: bool = False
+    set_multiplayer_name: bool = True
+    extra: dict[str, Any] = field(default_factory=dict)
 
     def to_dict(self) -> dict[str, Any]:
-        return {
-            "saved_games_path": self.saved_games_path,
-            "documents_path": self.documents_path,
-            "dcs_install_path": self.dcs_install_path,
-            "dtc_app_path": self.dtc_app_path,
-            "custom_kneeboard_path": self.custom_kneeboard_path,
-            "custom_zip_folder": self.custom_zip_folder,
-            "kill_dtc_before_launch": self.kill_dtc_before_launch,
-            "last_source_zip": self.last_source_zip,
-            "last_source_type": self.last_source_type,
-            "backup_dir": self.backup_dir,
-            "auto_install_latest_enabled": self.auto_install_latest_enabled,
-            "show_restore_preview": self.show_restore_preview,
-            "write_install_manifest": self.write_install_manifest,
-            "safe_cleanup_mode": self.safe_cleanup_mode,
-            "open_destinations_after_install": self.open_destinations_after_install,
-        }
+        payload: dict[str, Any] = dict(self.extra)
+        payload.update(
+            {
+                "saved_games_path": self.saved_games_path,
+                "documents_path": self.documents_path,
+                "dcs_install_path": self.dcs_install_path,
+                "dtc_app_path": self.dtc_app_path,
+                "custom_kneeboard_path": self.custom_kneeboard_path,
+                "custom_zip_folder": self.custom_zip_folder,
+                "kill_dtc_before_launch": self.kill_dtc_before_launch,
+                "last_source_zip": self.last_source_zip,
+                "last_source_type": self.last_source_type,
+                "backup_dir": self.backup_dir,
+                "auto_install_latest_enabled": self.auto_install_latest_enabled,
+                "show_restore_preview": self.show_restore_preview,
+                "write_install_manifest": self.write_install_manifest,
+                "safe_cleanup_mode": self.safe_cleanup_mode,
+                "open_destinations_after_install": self.open_destinations_after_install,
+                "set_multiplayer_name": self.set_multiplayer_name,
+            }
+        )
+        return payload
 
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> "AppConfig":
+        known = {
+            "saved_games_path",
+            "documents_path",
+            "dcs_install_path",
+            "dtc_app_path",
+            "custom_kneeboard_path",
+            "custom_zip_folder",
+            "kill_dtc_before_launch",
+            "last_source_zip",
+            "last_source_type",
+            "backup_dir",
+            "auto_install_latest_enabled",
+            "show_restore_preview",
+            "write_install_manifest",
+            "safe_cleanup_mode",
+            "open_destinations_after_install",
+            "set_multiplayer_name",
+        }
+        extra = {key: value for key, value in data.items() if key not in known}
         return cls(
             saved_games_path=str(data.get("saved_games_path", "")),
             documents_path=str(data.get("documents_path", "")),
@@ -156,5 +202,9 @@ class AppConfig:
             show_restore_preview=bool(data.get("show_restore_preview", True)),
             write_install_manifest=bool(data.get("write_install_manifest", True)),
             safe_cleanup_mode=bool(data.get("safe_cleanup_mode", False)),
-            open_destinations_after_install=bool(data.get("open_destinations_after_install", False)),
+            open_destinations_after_install=bool(
+                data.get("open_destinations_after_install", False)
+            ),
+            set_multiplayer_name=bool(data.get("set_multiplayer_name", True)),
+            extra=extra,
         )

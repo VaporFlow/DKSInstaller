@@ -2,7 +2,7 @@
 
 Windows desktop installer for Digital Kneeboard Simulator (DKS) flight-plan ZIP packages.
 
-Current version: `v0.9.1`
+Current version: `v0.10.0`
 
 ![DKS Installer main window](docs/media/01-main-window.png)
 
@@ -40,7 +40,8 @@ Open the latest release, expand **Assets**, download `DKSInstaller.exe`, then ru
 - Supports manual ZIP selection.
 - Can auto-install the latest Downloads ZIP.
 - Persists user paths/preferences locally.
-- Supports optional DTC integration.
+- Supports optional DTC integration, including in-game cartridges under `<DCS>\DTC\`.
+- Merges DCS Route Tool presets and optional AJS37 cartridges when the package includes them.
 - Supports optional custom kneeboard mirror output.
 - Shows install progress, logs, timing, and a final summary.
 

@@ -7,13 +7,15 @@ import subprocess
 import time
 import zipfile
 from datetime import datetime, timezone
+from dataclasses import dataclass
 from pathlib import Path, PurePosixPath, PureWindowsPath
 from tempfile import TemporaryDirectory
 from typing import Callable
 
 from .config import get_local_appdata_dir
-from .loadout_merge import merge_loadouts
+from .loadout_merge import merge_loadouts, merge_route_preset, remove_dks_lua_entries
 from .models import InstallOptions, InstallPlan, InstallResult, PackageInfo, RestoreEntry
+from .nicknames import set_multiplayer_nickname
 from .version import APP_VERSION
 
 ProgressCallback = Callable[[int, str], None]
@@ -32,7 +34,30 @@ AGGRESSIVE_DTC_PRESET_FOLDERS = (
     "F-15ESE",
 )
 
+LOADOUT_AIRCRAFT_FILES = (
+    "F-16C_50.lua",
+    "FA-18C_hornet.lua",
+    "A-10C_2.lua",
+    "A-10C.lua",
+    "AH-64D_BLK_II.lua",
+    "AV-8B.lua",
+    "OH-58D.lua",
+    "F-15ESE.lua",
+    "AJS37.lua",
+    "MB-339A.lua",
+)
+
 CUSTOM_KNEEBOARD_TRACKER_FILE = ".dks-custom-kneeboard.json"
+AJS37_SAVED_GAMES_FOLDER = "DCS_AJS37"
+AJS37_CARTRIDGE_NAME = "CustomCartridge.ini"
+
+
+@dataclass
+class CleanupPlan:
+    delete_files: list[Path]
+    backup_files: list[Path]
+    loadout_cleanup_targets: list[Path]
+    route_cleanup_targets: list[Path]
 
 
 def _entry_to_path(root: Path, zip_entry: str) -> Path:
@@ -79,15 +104,23 @@ def _make_step_logger(log: LogCallback) -> StepLogCallback:
     return mark
 
 
+def _empty_install_plan() -> InstallPlan:
+    return InstallPlan(
+        kneeboard_dir=None,
+        custom_kneeboard_dir=None,
+        dtc_preset_target=None,
+        in_game_dtc_target=None,
+        in_game_dtc_legacy_target=None,
+        loadout_dir=None,
+        route_tool_target=None,
+        ajs37_cartridge_target=None,
+        nicknames_path=None,
+    )
+
+
 def _build_install_plan(package_info: PackageInfo, options: InstallOptions) -> InstallPlan:
     if package_info.kind != "standard" or package_info.manifest is None:
-        return InstallPlan(
-            kneeboard_dir=None,
-            custom_kneeboard_dir=None,
-            dtc_preset_target=None,
-            in_game_dtc_target=None,
-            loadout_dir=None,
-        )
+        return _empty_install_plan()
 
     manifest = package_info.manifest
     dcs_saved_games_folder = options.saved_games_path
@@ -112,24 +145,46 @@ def _build_install_plan(package_info: PackageInfo, options: InstallOptions) -> I
                 / f"{manifest.design.name}_OB.json"
             )
 
+    in_game_dtc_name = (
+        Path(package_info.in_game_dtc_entry).name
+        if package_info.in_game_dtc_entry
+        else f"{manifest.design.name}_OB.dtc"
+    )
     in_game_dtc_target: Path | None = None
+    in_game_dtc_legacy_target = dcs_saved_games_folder / in_game_dtc_name
     if package_info.in_game_dtc_entry:
-        in_game_dtc_target = dcs_saved_games_folder / Path(package_info.in_game_dtc_entry).name
+        in_game_dtc_target = dcs_saved_games_folder / "DTC" / in_game_dtc_name
 
-    loadout_dir: Path | None = None
-    if package_info.loadout_entries:
-        loadout_dir = dcs_saved_games_folder / "MissionEditor" / "UnitPayloads"
+    loadout_dir = dcs_saved_games_folder / "MissionEditor" / "UnitPayloads"
 
     custom_kneeboard_dir: Path | None = None
     if options.custom_kneeboard_path is not None:
         custom_kneeboard_dir = options.custom_kneeboard_path
+
+    route_tool_target: Path | None = None
+    if manifest.route_tool is not None:
+        route_tool_target = (
+            dcs_saved_games_folder
+            / "Config"
+            / "RouteToolPresets"
+            / manifest.route_tool.map_file_name
+        )
+
+    ajs37_cartridge_target = (
+        dcs_saved_games_folder.parent / AJS37_SAVED_GAMES_FOLDER / AJS37_CARTRIDGE_NAME
+    )
+    nicknames_path = dcs_saved_games_folder / "Config" / "nicknames.lua"
 
     return InstallPlan(
         kneeboard_dir=kneeboard_dir,
         custom_kneeboard_dir=custom_kneeboard_dir,
         dtc_preset_target=dtc_preset_target,
         in_game_dtc_target=in_game_dtc_target,
+        in_game_dtc_legacy_target=in_game_dtc_legacy_target,
         loadout_dir=loadout_dir,
+        route_tool_target=route_tool_target,
+        ajs37_cartridge_target=ajs37_cartridge_target,
+        nicknames_path=nicknames_path,
     )
 
 
@@ -175,76 +230,96 @@ def _write_custom_kneeboard_tracker(custom_dir: Path, installed_files: list[Path
     )
 
 
-def _collect_cleanup_candidates(
+def _add_existing_file(bucket: set[Path], path: Path | None) -> None:
+    if path is not None and path.exists() and path.is_file():
+        bucket.add(path)
+
+
+def _add_glob(bucket: set[Path], folder: Path, pattern: str) -> None:
+    if not folder.exists():
+        return
+    for item in folder.glob(pattern):
+        if item.is_file():
+            bucket.add(item)
+
+
+def _collect_cleanup_plan(
     package_info: PackageInfo,
     plan: InstallPlan,
     options: InstallOptions,
-) -> list[Path]:
+) -> CleanupPlan:
     if package_info.kind != "standard" or package_info.manifest is None:
-        return []
+        return CleanupPlan([], [], [], [])
 
     manifest = package_info.manifest
-    candidates: set[Path] = set()
+    delete_files: set[Path] = set()
+    loadout_cleanup: set[Path] = set()
+    route_cleanup: set[Path] = set()
     dcs_saved_games_folder = options.saved_games_path
-
-    def add_glob(folder: Path, pattern: str) -> None:
-        if folder.exists():
-            for item in folder.glob(pattern):
-                if item.is_file():
-                    candidates.add(item)
+    safe = options.safe_cleanup_mode
 
     if plan.kneeboard_dir:
-        if options.safe_cleanup_mode:
-            add_glob(plan.kneeboard_dir, f"*_{manifest.design.name}_OB.png")
-        else:
-            add_glob(plan.kneeboard_dir, "*_OB.png")
+        pattern = f"*_{manifest.design.name}_OB.png" if safe else "*_OB.png"
+        _add_glob(delete_files, plan.kneeboard_dir, pattern)
 
     common_kneeboard_dir = dcs_saved_games_folder / "Kneeboard"
-    if options.safe_cleanup_mode:
-        add_glob(common_kneeboard_dir, f"*_{manifest.design.name}_OB.png")
-    else:
-        add_glob(common_kneeboard_dir, "*_OB.png")
+    kneeboard_pattern = f"*_{manifest.design.name}_OB.png" if safe else "*_OB.png"
+    _add_glob(delete_files, common_kneeboard_dir, kneeboard_pattern)
 
-    if options.safe_cleanup_mode:
-        if plan.in_game_dtc_target and plan.in_game_dtc_target.exists():
-            candidates.add(plan.in_game_dtc_target)
+    dtc_dir = dcs_saved_games_folder / "DTC"
+    if safe:
+        _add_existing_file(delete_files, plan.in_game_dtc_target)
+        _add_existing_file(delete_files, plan.in_game_dtc_legacy_target)
     else:
-        add_glob(dcs_saved_games_folder, "*_OB.dtc")
+        _add_glob(delete_files, dtc_dir, "*_OB.dtc")
+        _add_glob(delete_files, dcs_saved_games_folder, "*_OB.dtc")
 
-    if plan.dtc_preset_target and plan.dtc_preset_target.exists():
-        candidates.add(plan.dtc_preset_target)
+    _add_existing_file(delete_files, plan.dtc_preset_target)
 
     dtc_presets_base = options.documents_path / "DCS-DTC" / "Presets"
-    if dtc_presets_base.exists() and package_info.manifest:
-        if options.safe_cleanup_mode:
-            safe_target = (
-                dtc_presets_base
-                / manifest.aircraft.dtc_folder
-                / f"{manifest.design.name}_OB.json"
-            )
-            if safe_target.exists():
-                candidates.add(safe_target)
-        else:
-            for folder_name in AGGRESSIVE_DTC_PRESET_FOLDERS:
-                folder_path = dtc_presets_base / folder_name
-                if not folder_path.exists():
-                    continue
-                for preset_file in folder_path.glob("*_OB.json"):
-                    if preset_file.is_file():
-                        candidates.add(preset_file)
+    if safe:
+        safe_target = (
+            dtc_presets_base
+            / manifest.aircraft.dtc_folder
+            / f"{manifest.design.name}_OB.json"
+        )
+        _add_existing_file(delete_files, safe_target)
+    else:
+        for folder_name in AGGRESSIVE_DTC_PRESET_FOLDERS:
+            _add_glob(delete_files, dtc_presets_base / folder_name, "*_OB.json")
 
-    if plan.loadout_dir and plan.loadout_dir.exists() and package_info.loadout_entries:
-        for entry in package_info.loadout_entries:
-            target_file = plan.loadout_dir / Path(entry).name
-            if target_file.exists():
-                candidates.add(target_file)
+    if plan.ajs37_cartridge_target:
+        if not safe or package_info.ajs37_cartridge_entry:
+            _add_existing_file(delete_files, plan.ajs37_cartridge_target)
 
     if plan.custom_kneeboard_dir:
         for tracked_file in _read_custom_kneeboard_tracked_files(plan.custom_kneeboard_dir):
-            if tracked_file.exists() and tracked_file.is_file():
-                candidates.add(tracked_file)
+            _add_existing_file(delete_files, tracked_file)
 
-    return sorted(candidates)
+    if plan.loadout_dir:
+        if safe:
+            for entry in package_info.loadout_entries:
+                _add_existing_file(loadout_cleanup, plan.loadout_dir / Path(entry).name)
+        else:
+            for filename in LOADOUT_AIRCRAFT_FILES:
+                _add_existing_file(loadout_cleanup, plan.loadout_dir / filename)
+
+    route_dir = dcs_saved_games_folder / "Config" / "RouteToolPresets"
+    if safe:
+        _add_existing_file(route_cleanup, plan.route_tool_target)
+    else:
+        _add_glob(route_cleanup, route_dir, "*.lua")
+
+    backup_files = set(delete_files) | set(loadout_cleanup) | set(route_cleanup)
+    if manifest.multiplayer is not None:
+        _add_existing_file(backup_files, plan.nicknames_path)
+
+    return CleanupPlan(
+        delete_files=sorted(delete_files),
+        backup_files=sorted(backup_files),
+        loadout_cleanup_targets=sorted(loadout_cleanup),
+        route_cleanup_targets=sorted(route_cleanup),
+    )
 
 
 def _encode_snapshot_path(target_path: Path) -> str:
@@ -562,6 +637,21 @@ def _install_backup_snapshot(
     return result
 
 
+def _copy_installed(source: Path, destination: Path, result: InstallResult) -> None:
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    shutil.copy2(source, destination)
+    result.installed_files.append(destination)
+
+
+def _package_file(temp_dir: Path, entry: str | None) -> Path | None:
+    if not entry:
+        return None
+    path = _entry_to_path(temp_dir, entry)
+    if path.exists() and path.is_file():
+        return path
+    return None
+
+
 def _install_standard_package(
     package_info: PackageInfo,
     options: InstallOptions,
@@ -592,13 +682,15 @@ def _install_standard_package(
             "Loadout files detected in package. "
             "These are merged into DCS UnitPayloads when luae.exe is available."
         )
+    if package_info.route_preset_entry is None:
+        result.skipped_items.append("No Route Tool preset in this package.")
 
-    cleanup_candidates = _collect_cleanup_candidates(package_info, plan, options)
+    cleanup_plan = _collect_cleanup_plan(package_info, plan, options)
     step_log("Phase: resolve cleanup candidates")
 
     if options.mode == "backup_install":
         _emit_progress(progress, 20, "Creating backup of current files...")
-        backup_zip = _create_backup_zip(cleanup_candidates, options, package_info, log)
+        backup_zip = _create_backup_zip(cleanup_plan.backup_files, options, package_info, log)
         result.backup_zip = backup_zip
         if backup_zip is None:
             result.warnings.append("No existing files were found to back up.")
@@ -611,10 +703,35 @@ def _install_standard_package(
         step_log("Phase: extract source ZIP")
 
         _emit_progress(progress, 45, "Cleaning previous DKS files...")
-        for old_file in cleanup_candidates:
+        for old_file in cleanup_plan.delete_files:
             if old_file.exists():
                 old_file.unlink(missing_ok=True)
                 result.removed_files.append(old_file)
+
+        merge_script_path = _package_file(temp_dir, package_info.merge_script_entry)
+        route_merge_script_path = _package_file(
+            temp_dir, package_info.route_merge_script_entry
+        )
+        if merge_script_path is not None:
+            result.warnings.extend(
+                remove_dks_lua_entries(
+                    merge_script_path=merge_script_path,
+                    target_files=cleanup_plan.loadout_cleanup_targets,
+                    dcs_install_path=options.dcs_install_path,
+                    log=log,
+                    label="loadouts",
+                )
+            )
+        if route_merge_script_path is not None:
+            result.warnings.extend(
+                remove_dks_lua_entries(
+                    merge_script_path=route_merge_script_path,
+                    target_files=cleanup_plan.route_cleanup_targets,
+                    dcs_install_path=options.dcs_install_path,
+                    log=log,
+                    label="Route Tool presets",
+                )
+            )
         step_log("Phase: cleanup previous files")
 
         if plan.kneeboard_dir is None:
@@ -642,14 +759,12 @@ def _install_standard_package(
                 continue
 
             destination = plan.kneeboard_dir / f"{index:03d}_{manifest.design.name}_OB.png"
-            shutil.copy2(source_file, destination)
-            result.installed_files.append(destination)
+            _copy_installed(source_file, destination, result)
 
             if custom_kneeboard_dir is not None:
                 custom_destination = custom_kneeboard_dir / destination.name
                 try:
-                    shutil.copy2(source_file, custom_destination)
-                    result.installed_files.append(custom_destination)
+                    _copy_installed(source_file, custom_destination, result)
                     custom_kneeboard_copies.append(custom_destination)
                 except OSError as exc:
                     result.warnings.append(
@@ -667,34 +782,62 @@ def _install_standard_package(
                 )
         step_log("Phase: install kneeboard pages")
 
-        _emit_progress(progress, 72, "Installing DTC files (if present)...")
+        _emit_progress(progress, 70, "Installing DTC and cartridge files...")
         if package_info.dtc_json_entry and plan.dtc_preset_target:
-            source_dtc_json = _entry_to_path(temp_dir, package_info.dtc_json_entry)
-            if source_dtc_json.exists():
-                plan.dtc_preset_target.parent.mkdir(parents=True, exist_ok=True)
-                shutil.copy2(source_dtc_json, plan.dtc_preset_target)
-                result.installed_files.append(plan.dtc_preset_target)
+            source_dtc_json = _package_file(temp_dir, package_info.dtc_json_entry)
+            if source_dtc_json is not None:
+                _copy_installed(source_dtc_json, plan.dtc_preset_target, result)
             else:
                 result.warnings.append(
                     "dtc.json entry was declared but missing from extracted content."
                 )
 
         if package_info.in_game_dtc_entry and plan.in_game_dtc_target:
-            source_ingame = _entry_to_path(temp_dir, package_info.in_game_dtc_entry)
-            if source_ingame.exists():
-                plan.in_game_dtc_target.parent.mkdir(parents=True, exist_ok=True)
-                shutil.copy2(source_ingame, plan.in_game_dtc_target)
-                result.installed_files.append(plan.in_game_dtc_target)
+            source_ingame = _package_file(temp_dir, package_info.in_game_dtc_entry)
+            if source_ingame is not None:
+                _copy_installed(source_ingame, plan.in_game_dtc_target, result)
+
+        if package_info.ajs37_cartridge_entry and plan.ajs37_cartridge_target:
+            source_cartridge = _package_file(temp_dir, package_info.ajs37_cartridge_entry)
+            if source_cartridge is not None:
+                _copy_installed(source_cartridge, plan.ajs37_cartridge_target, result)
 
         _maybe_launch_dtc_app(package_info, plan, options, result, log)
         step_log("Phase: install DTC artifacts")
 
-        _emit_progress(progress, 84, "Processing loadouts (if present)...")
+        _emit_progress(progress, 78, "Installing Route Tool preset...")
+        route_source = _package_file(temp_dir, package_info.route_preset_entry)
+        if route_source is None:
+            step_log("Phase: install Route Tool preset (skipped)")
+        elif plan.route_tool_target is None:
+            result.skipped_items.append(
+                "Route Tool preset not installed: this design's theater has no known DCS map id."
+            )
+            step_log("Phase: install Route Tool preset (skipped)")
+        elif not plan.route_tool_target.exists():
+            _copy_installed(route_source, plan.route_tool_target, result)
+            step_log("Phase: install Route Tool preset")
+        else:
+            merged_ok, route_warnings = merge_route_preset(
+                source_file=route_source,
+                merge_script_path=route_merge_script_path,
+                target_file=plan.route_tool_target,
+                dcs_install_path=options.dcs_install_path,
+                log=log,
+            )
+            result.warnings.extend(route_warnings)
+            if merged_ok:
+                result.installed_files.append(plan.route_tool_target)
+            step_log("Phase: install Route Tool preset")
+
+        _emit_progress(progress, 86, "Processing loadouts (if present)...")
         if package_info.loadout_entries and plan.loadout_dir:
             loadout_sources = [
-                _entry_to_path(temp_dir, entry)
-                for entry in package_info.loadout_entries
-                if _entry_to_path(temp_dir, entry).exists()
+                path
+                for path in (
+                    _package_file(temp_dir, entry) for entry in package_info.loadout_entries
+                )
+                if path is not None
             ]
 
             if not loadout_sources:
@@ -702,11 +845,6 @@ def _install_standard_package(
                     "Loadout entries were declared but no loadout files were extracted."
                 )
 
-            merge_script_path = (
-                _entry_to_path(temp_dir, package_info.merge_script_entry)
-                if package_info.merge_script_entry
-                else None
-            )
             merged, warnings = merge_loadouts(
                 loadout_files=loadout_sources,
                 merge_script_path=merge_script_path,
@@ -724,17 +862,52 @@ def _install_standard_package(
         else:
             step_log("Phase: process loadouts (skipped)")
 
+        if (
+            options.set_multiplayer_name
+            and manifest.multiplayer is not None
+            and plan.nicknames_path is not None
+        ):
+            try:
+                written, nickname_warning = set_multiplayer_nickname(
+                    manifest.multiplayer.name,
+                    plan.nicknames_path,
+                )
+            except OSError as exc:
+                result.warnings.append(f"Could not set the DCS multiplayer name: {exc}")
+            else:
+                if written:
+                    result.installed_files.append(plan.nicknames_path)
+                    log(f"DCS multiplayer name set to: {manifest.multiplayer.name}")
+                    if nickname_warning:
+                        result.warnings.append(nickname_warning)
+                elif os.environ.get("DKS_SET_MP_NAME") == "0":
+                    result.skipped_items.append(
+                        "DCS multiplayer name not set (disabled by DKS_SET_MP_NAME=0)."
+                    )
+        elif manifest.multiplayer is not None and not options.set_multiplayer_name:
+            result.skipped_items.append(
+                "DCS multiplayer name not set (disabled in installer options)."
+            )
+
     _emit_progress(progress, 95, "Finalizing installation...")
     step_log("Phase: finalize installation")
 
     if options.open_destinations_after_install:
         destinations = [
             path
-            for path in [plan.kneeboard_dir, plan.custom_kneeboard_dir, plan.loadout_dir]
+            for path in [plan.kneeboard_dir, plan.custom_kneeboard_dir]
             if path is not None
         ]
+        if plan.loadout_dir is not None and package_info.loadout_entries:
+            destinations.append(plan.loadout_dir)
         if plan.dtc_preset_target is not None:
             destinations.append(plan.dtc_preset_target.parent)
+        if plan.in_game_dtc_target is not None:
+            destinations.append(plan.in_game_dtc_target.parent)
+        if plan.route_tool_target is not None and package_info.route_preset_entry:
+            destinations.append(plan.route_tool_target.parent)
+        if plan.ajs37_cartridge_target is not None and package_info.ajs37_cartridge_entry:
+            destinations.append(plan.ajs37_cartridge_target.parent)
         _open_destinations(result, destinations)
 
     result.success = True
@@ -793,15 +966,31 @@ def build_install_preview(package_info: PackageInfo, options: InstallOptions) ->
         lines.append(f"- DTC preset: {plan.dtc_preset_target}")
     if plan.in_game_dtc_target:
         lines.append(f"- In-game DTC: {plan.in_game_dtc_target}")
-    if plan.loadout_dir:
+    if plan.route_tool_target and package_info.route_preset_entry:
+        lines.append(f"- Route Tool preset: {plan.route_tool_target}")
+    if plan.ajs37_cartridge_target and package_info.ajs37_cartridge_entry:
+        lines.append(f"- AJS37 cartridge: {plan.ajs37_cartridge_target}")
+    if plan.loadout_dir and package_info.loadout_entries:
         lines.append(f"- Loadouts: {plan.loadout_dir}")
+    if plan.nicknames_path and package_info.manifest and package_info.manifest.multiplayer:
+        lines.append(
+            f"- Multiplayer name: {package_info.manifest.multiplayer.name} -> {plan.nicknames_path}"
+        )
 
     lines.append("")
     lines.append("Package payload:")
     lines.append(f"- PNG pages: {len(package_info.pilot_png_entries)}")
     lines.append(f"- Has dtc.json: {'yes' if package_info.dtc_json_entry else 'no'}")
     lines.append(f"- Has in-game DTC: {'yes' if package_info.in_game_dtc_entry else 'no'}")
+    lines.append(f"- Has Route Tool preset: {'yes' if package_info.route_preset_entry else 'no'}")
+    lines.append(
+        f"- Has AJS37 cartridge: {'yes' if package_info.ajs37_cartridge_entry else 'no'}"
+    )
     lines.append(f"- Loadout files: {len(package_info.loadout_entries)}")
+    if package_info.manifest and package_info.manifest.route_tool:
+        lines.append(f"- Route Tool map: {package_info.manifest.route_tool.map_file_name}")
+    if package_info.manifest and package_info.manifest.multiplayer:
+        lines.append(f"- Multiplayer name: {package_info.manifest.multiplayer.name}")
 
     return "\n".join(lines)
 

@@ -9,9 +9,11 @@ from .models import (
     AircraftInfo,
     BackupManifest,
     DesignInfo,
+    MultiplayerInfo,
     PackageInfo,
     PackageManifest,
     RestoreEntry,
+    RouteToolInfo,
 )
 
 
@@ -60,10 +62,26 @@ def _parse_manifest(payload: dict) -> PackageManifest:
             dtc_in_dcs_folder=bool(aircraft_data.get("dtcInDcsFolder", False)),
         )
 
+        route_tool: RouteToolInfo | None = None
+        route_tool_data = payload.get("routeTool")
+        if isinstance(route_tool_data, dict):
+            map_file_name = str(route_tool_data.get("mapFileName", "")).strip()
+            if map_file_name:
+                route_tool = RouteToolInfo(map_file_name=Path(map_file_name).name)
+
+        multiplayer: MultiplayerInfo | None = None
+        multiplayer_data = payload.get("multiplayer")
+        if isinstance(multiplayer_data, dict):
+            mp_name = str(multiplayer_data.get("name", "")).strip()
+            if mp_name:
+                multiplayer = MultiplayerInfo(name=mp_name)
+
         return PackageManifest(
             manifest_version=int(payload.get("manifestVersion", 1)),
             design=design,
             aircraft=aircraft,
+            route_tool=route_tool,
+            multiplayer=multiplayer,
         )
     except (KeyError, TypeError, ValueError) as exc:
         raise ValueError(f"Invalid manifest.json schema: {exc}") from exc
@@ -131,6 +149,18 @@ def _read_standard_package(
     if merge_script_entry not in entries:
         merge_script_entry = None
 
+    route_preset_entry = f"{payload_root}route-tool-preset.lua"
+    if route_preset_entry not in entries:
+        route_preset_entry = None
+
+    route_merge_script_entry = f"{payload_root}merge-route-preset.lua"
+    if route_merge_script_entry not in entries:
+        route_merge_script_entry = None
+
+    ajs37_cartridge_entry = f"{payload_root}CustomCartridge.ini"
+    if ajs37_cartridge_entry not in entries:
+        ajs37_cartridge_entry = None
+
     if "install.bat" not in entries:
         warnings.append("install.bat not present at ZIP root.")
     if "README.txt" not in entries:
@@ -146,6 +176,9 @@ def _read_standard_package(
         in_game_dtc_entry=in_game_dtc_entry,
         loadout_entries=loadout_entries,
         merge_script_entry=merge_script_entry,
+        route_preset_entry=route_preset_entry,
+        route_merge_script_entry=route_merge_script_entry,
+        ajs37_cartridge_entry=ajs37_cartridge_entry,
         warnings=warnings,
     )
 

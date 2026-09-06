@@ -2,6 +2,19 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.10.0] - 2026-09-06
+
+### Added
+- Route Tool preset install/cleanup using packaged `merge-route-preset.lua` and `manifest.routeTool.mapFileName`.
+- Optional AJS37 Viggen cartridge install to `Saved Games\DCS_AJS37\CustomCartridge.ini` when the package includes it.
+- Optional DCS multiplayer nickname rewrite from `manifest.multiplayer.name` (disable in Advanced, or with `DKS_SET_MP_NAME=0`).
+- Config save now preserves extra keys written by the bundled `install.ps1` (for example `install_mode`).
+
+### Changed
+- In-game `*_OB.dtc` cartridges now install to `<writedir>\DTC\` (June 2026 DCS path) and clean both that folder and the pre-patch writedir root.
+- Loadout cleanup now runs `merge-loadouts.lua --remove-only` instead of deleting the whole UnitPayloads file, so user payloads survive.
+- Aggressive cleanup also covers MB-339A loadouts and every Route Tool theatre file.
+
 ## [0.9.1] - 2026-05-25
 
 ### Fixed
