@@ -2,6 +2,12 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.11.0] - 2026-10-03
+
+### Changed
+- Replaced the app icon with a dark-blue **DKSi** mark so the installer is distinct from the original DKS icon.
+- The window and the pinned taskbar button now load that same icon.
+
 ## [0.10.0] - 2026-09-06
 
 ### Added
