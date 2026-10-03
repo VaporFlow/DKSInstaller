@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import ctypes
 import os
 import shutil
 import sys
@@ -365,21 +366,42 @@ class DksInstallerApp:
         self.log_text = ScrolledText(status_frame, height=14, state="disabled")
         self.log_text.grid(row=1, column=0, padx=6, pady=(0, 6), sticky="nsew")
 
+    def _icon_file(self) -> Path | None:
+        candidates: list[Path] = []
+        meipass = getattr(sys, "_MEIPASS", None)
+        if meipass:
+            candidates.append(Path(meipass) / "assets" / "dks-web-favicon.ico")
+        candidates.append(get_runtime_dir() / "assets" / "dks-web-favicon.ico")
+        for candidate in candidates:
+            if candidate.is_file():
+                return candidate
+        return None
+
     def _set_window_icon(self) -> None:
-        icon_candidates: list[Path] = []
+        icon_path = self._icon_file()
+        if icon_path is None:
+            return
+        icon_text = str(icon_path)
+        try:
+            # -default is what Windows uses for the taskbar button.
+            self.root.iconbitmap(default=icon_text)
+            self.root.iconbitmap(icon_text)
+        except (tk.TclError, OSError):
+            return
+        self._apply_taskbar_icon(icon_text)
 
-        if getattr(sys, "frozen", False):
-            icon_candidates.append(Path(sys.executable))
-
-        icon_candidates.append(get_runtime_dir() / "assets" / "dks-web-favicon.ico")
-
-        for candidate in icon_candidates:
-            try:
-                if candidate.exists():
-                    self.root.iconbitmap(str(candidate))
-                    return
-            except (tk.TclError, OSError):
-                continue
+    def _apply_taskbar_icon(self, icon_text: str) -> None:
+        if sys.platform != "win32":
+            return
+        user32 = ctypes.windll.user32
+        hwnd = self.root.winfo_id()
+        lr_loadfromfile = 0x00000010
+        image_icon = 1
+        wm_seticon = 0x0080
+        for size, icon_kind in ((16, 0), (32, 1)):
+            handle = user32.LoadImageW(None, icon_text, image_icon, size, size, lr_loadfromfile)
+            if handle:
+                user32.SendMessageW(hwnd, wm_seticon, icon_kind, handle)
 
     def _focus_installer_window(self) -> None:
         def apply_focus() -> None:
@@ -1246,7 +1268,17 @@ class DksInstallerApp:
         save_config(data)
 
 
+def _set_windows_app_id() -> None:
+    if sys.platform != "win32":
+        return
+    try:
+        ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID("DKS.DKSInstaller")
+    except (AttributeError, OSError):
+        return
+
+
 def run() -> None:
+    _set_windows_app_id()
     root = tk.Tk()
     DksInstallerApp(root)
     root.mainloop()

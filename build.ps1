@@ -33,6 +33,7 @@ try {
         --windowed `
         --name DKSInstaller `
         --icon $iconPath `
+        --add-data "$iconPath;assets" `
         main.py
 }
 finally {
