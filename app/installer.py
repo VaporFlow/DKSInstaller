@@ -12,6 +12,7 @@ from pathlib import Path, PurePosixPath, PureWindowsPath
 from tempfile import TemporaryDirectory
 from typing import Callable
 
+from .ajs37_cartridge import install_ajs37_cartridge
 from .config import get_local_appdata_dir
 from .loadout_merge import merge_loadouts, merge_route_preset, remove_dks_lua_entries
 from .models import InstallOptions, InstallPlan, InstallResult, PackageInfo, RestoreEntry
@@ -800,7 +801,17 @@ def _install_standard_package(
         if package_info.ajs37_cartridge_entry and plan.ajs37_cartridge_target:
             source_cartridge = _package_file(temp_dir, package_info.ajs37_cartridge_entry)
             if source_cartridge is not None:
-                _copy_installed(source_cartridge, plan.ajs37_cartridge_target, result)
+                converted, cartridge_warnings = install_ajs37_cartridge(
+                    source_cartridge,
+                    plan.ajs37_cartridge_target,
+                )
+                result.warnings.extend(cartridge_warnings)
+                result.installed_files.append(plan.ajs37_cartridge_target)
+                if converted:
+                    log(
+                        "Converted the AJS37 cartridge to the current DCS format "
+                        "(point sections such as B1, BX6, and L1)."
+                    )
 
         _maybe_launch_dtc_app(package_info, plan, options, result, log)
         step_log("Phase: install DTC artifacts")

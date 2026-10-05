@@ -2,6 +2,11 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.12.0] - 2026-10-05
+
+### Added
+- AJS37 cartridges exported by DKS are rewritten into the current DCS layout on install. Sequential `b1`–`b9` slots become named points such as `B1`, `BX6`, and `L1`, with the coordinate and waypoint fields DCS reads.
+
 ## [0.11.0] - 2026-10-03
 
 ### Changed
